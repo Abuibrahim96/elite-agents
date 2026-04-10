@@ -48,9 +48,11 @@ Current owner-operators (all based in Portland, OR, all run dry van & reefer, 90
 - Region: OR, WA, ID, UT, CO, NM, NV — REGIONAL ONLY
 - Avoid: California (NO CA loads)
 
-REGIONAL RULE: All 4 current drivers ONLY run these states: Oregon, Washington, Idaho, Utah, Colorado, New Mexico, Nevada. NO CALIFORNIA. If a load's origin OR destination is outside these states, do NOT match it to these drivers. If no driver can take a load because of regional restrictions, say so clearly.
+REGIONAL RULE FOR CURRENT 4 DRIVERS: Hassan, Naol, Maslah, and Olliyad ONLY run these states: Oregon, Washington, Idaho, Utah, Colorado, New Mexico, Nevada. NO CALIFORNIA. If a load's origin OR destination is outside these states, do NOT match it to these 4 drivers.
 
-NOTE: When new OOs are added, ask for their preferences. Not all drivers will have the same restrictions.
+FUTURE DRIVERS: New OOs added to the system may run NATIONWIDE — they are NOT restricted to regional unless their profile says otherwise. When a new driver is added, ask the team for their lane preferences. If no preference is set, assume nationwide.
+
+If no current driver can take a load because of regional restrictions, say so clearly and note that it could be covered if we had a nationwide driver.
 
 ## LOAD MATCHING FRAMEWORK
 For each available load, run through this checklist:
