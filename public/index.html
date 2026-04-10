@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Elite Trucking — Agent Control Panel</title>
+<style>
+  :root {
+    --bg: #030712; --card: #111827; --border: #1f2937; --text: #e5e7eb;
+    --muted: #6b7280; --gold: #f59e0b; --green: #10b981; --red: #ef4444;
+    --blue: #3b82f6; --purple: #8b5cf6; --orange: #f97316;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+  a { color: var(--blue); text-decoration: none; }
+
+  .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 20px 30px; border-bottom: 2px solid var(--gold); display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { font-size: 1.4rem; color: var(--gold); }
+  .header .status { display: flex; gap: 8px; align-items: center; }
+  .header .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+  .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+  /* Stats row */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; text-align: center; }
+  .stat-card .value { font-size: 2rem; font-weight: 700; }
+  .stat-card .label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+  .stat-card.alert .value { color: var(--red); }
+  .stat-card.good .value { color: var(--green); }
+  .stat-card.money .value { color: var(--gold); }
+
+  /* Grid layout */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .panel-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .panel-header h2 { font-size: 0.9rem; font-weight: 600; }
+  .panel-body { padding: 14px 18px; max-height: 350px; overflow-y: auto; }
+
+  /* Agent cards */
+  .agent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .agent-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; cursor: pointer; transition: all 0.2s; }
+  .agent-card:hover { border-color: var(--gold); transform: translateY(-2px); }
+  .agent-card.running { border-color: var(--blue); }
+  .agent-card .name { font-weight: 600; font-size: 0.95rem; margin-bottom: 4px; }
+  .agent-card .desc { font-size: 0.75rem; color: var(--muted); margin-bottom: 10px; }
+  .agent-card .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 600; }
+  .badge-ready { background: #064e3b; color: var(--green); }
+  .badge-running { background: #1e3a5f; color: var(--blue); animation: pulse 1s infinite; }
+  .btn { padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.8rem; font-weight: 600; transition: all 0.15s; }
+  .btn-gold { background: var(--gold); color: #000; }
+  .btn-gold:hover { background: #d97706; }
+  .btn-blue { background: var(--blue); color: #fff; }
+  .btn-green { background: var(--green); color: #fff; }
+  .btn-red { background: var(--red); color: #fff; }
+  .btn-sm { padding: 4px 10px; font-size: 0.7rem; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  th { text-align: left; padding: 8px; color: var(--muted); font-weight: 600; font-size: 0.7rem; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+  td { padding: 8px; border-bottom: 1px solid var(--border); }
+  tr:hover { background: rgba(255,255,255,0.03); }
+
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
+  .tag-posted { background: #1e3a5f; color: #60a5fa; }
+  .tag-assigned { background: #3b2f00; color: var(--gold); }
+  .tag-transit { background: #064e3b; color: var(--green); }
+  .tag-delivered { background: #1a1a4e; color: var(--purple); }
+  .tag-expired { background: #3b1010; color: var(--red); }
+  .tag-expiring { background: #3b2f00; color: var(--orange); }
+  .tag-valid { background: #064e3b; color: var(--green); }
+  .tag-pending { background: #3b2f00; color: var(--gold); }
+
+  /* Agent output */
+  .output { background: #0a0a0a; border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-family: 'Consolas', monospace; font-size: 0.8rem; white-space: pre-wrap; max-height: 500px; overflow-y: auto; margin-top: 12px; line-height: 1.6; }
+
+  /* Comms log */
+  .comm-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .comm-item:last-child { border: none; }
+  .comm-meta { font-size: 0.7rem; color: var(--muted); margin-bottom: 4px; }
+  .comm-body { font-size: 0.8rem; }
+
+  .loading { text-align: center; padding: 40px; color: var(--muted); }
+  .full-width { grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>ELITE TRUCKING — AGENT CONTROL PANEL</h1>
+  <div class="status"><div class="dot"></div><span id="server-status" style="font-size:0.8rem; color:var(--green)">Connected</span></div>
+</div>
+
+<div class="container">
+  <!-- Stats -->
+  <div class="stats" id="stats-row">
+    <div class="stat-card"><div class="value" id="stat-drivers">-</div><div class="label">Active Drivers</div></div>
+    <div class="stat-card money"><div class="value" id="stat-revenue">-</div><div class="label">Total Revenue</div></div>
+    <div class="stat-card"><div class="value" id="stat-loads">-</div><div class="label">Active Loads</div></div>
+    <div class="stat-card money"><div class="value" id="stat-margin">-</div><div class="label">Company Margin</div></div>
+    <div class="stat-card alert"><div class="value" id="stat-compliance">-</div><div class="label">Compliance Alerts</div></div>
+    <div class="stat-card"><div class="value" id="stat-approvals">-</div><div class="label">Pending Approvals</div></div>
+    <div class="stat-card"><div class="value" id="stat-comms">-</div><div class="label">Messages Sent</div></div>
+    <div class="stat-card"><div class="value" id="stat-prospects">-</div><div class="label">Prospects</div></div>
+  </div>
+
+  <!-- Agent Cards -->
+  <h3 style="margin-bottom:12px; font-size:0.85rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.1em;">AI Agents</h3>
+  <div class="agent-grid" id="agent-cards"></div>
+
+  <!-- Agent Output -->
+  <div class="panel full-width" id="output-panel" style="display:none; margin-bottom:20px;">
+    <div class="panel-header">
+      <h2 id="output-title">Agent Output</h2>
+      <button class="btn btn-sm btn-gold" onclick="document.getElementById('output-panel').style.display='none'">Close</button>
+    </div>
+    <div class="output" id="agent-output"></div>
+  </div>
+
+  <div class="grid">
+    <!-- Loads -->
+    <div class="panel">
+      <div class="panel-header"><h2>Load Pipeline</h2><button class="btn btn-sm btn-blue" onclick="loadData()">Refresh</button></div>
+      <div class="panel-body"><table><thead><tr><th>Ref</th><th>Route</th><th>Rate</th><th>Driver</th><th>Status</th></tr></thead><tbody id="loads-table"></tbody></table></div>
+    </div>
+
+    <!-- Drivers -->
+    <div class="panel">
+      <div class="panel-header"><h2>Owner-Operators</h2></div>
+      <div class="panel-body"><table><thead><tr><th>Name</th><th>Equipment</th><th>Location</th><th>Status</th></tr></thead><tbody id="drivers-table"></tbody></table></div>
+    </div>
+
+    <!-- Compliance -->
+    <div class="panel">
+      <div class="panel-header"><h2>Compliance Alerts</h2></div>
+      <div class="panel-body" id="compliance-body"></div>
+    </div>
+
+    <!-- Approvals -->
+    <div class="panel">
+      <div class="panel-header"><h2>Approval Queue</h2></div>
+      <div class="panel-body" id="approvals-body"></div>
+    </div>
+
+    <!-- Communications -->
+    <div class="panel full-width">
+      <div class="panel-header"><h2>Communications Log</h2></div>
+      <div class="panel-body" id="comms-body"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:3000';
+const KEY = 'demo-key-123';
+const headers = { 'x-api-key': KEY, 'Content-Type': 'application/json' };
+
+const agents = [
+  { name: 'boss', label: 'Boss Agent', desc: 'Daily briefing & task delegation', icon: '👔', trigger: 'scheduled' },
+  { name: 'dispatch', label: 'Dispatch Agent', desc: 'Match loads to drivers', icon: '🚛', trigger: 'manual' },
+  { name: 'outreach', label: 'Outreach Agent', desc: 'Broker & shipper emails', icon: '📧', trigger: 'scheduled' },
+  { name: 'load_update', label: 'Load Update Agent', desc: 'Driver check-ins & ETAs', icon: '📍', trigger: 'scheduled' },
+  { name: 'compliance', label: 'Compliance Agent', desc: 'Expiration tracking & alerts', icon: '📋', trigger: 'scheduled' },
+  { name: 'acquisition', label: 'Acquisition Agent', desc: 'New partner research', icon: '🔍', trigger: 'scheduled' },
+];
+
+// Render agent cards
+const agentGrid = document.getElementById('agent-cards');
+agents.forEach(a => {
+  const card = document.createElement('div');
+  card.className = 'agent-card';
+  card.id = `agent-${a.name}`;
+  card.innerHTML = `
+    <div class="name">${a.icon} ${a.label}</div>
+    <div class="desc">${a.desc}</div>
+    <span class="badge badge-ready" id="badge-${a.name}">Ready</span>
+    <button class="btn btn-gold btn-sm" style="float:right" onclick="runAgent('${a.name}','${a.trigger}')">Run</button>
+  `;
+  agentGrid.appendChild(card);
+});
+
+async function api(path) {
+  const r = await fetch(API + path, { headers });
+  return r.json();
+}
+
+async function runAgent(name, trigger) {
+  const card = document.getElementById(`agent-${name}`);
+  const badge = document.getElementById(`badge-${name}`);
+  const panel = document.getElementById('output-panel');
+  const output = document.getElementById('agent-output');
+  const title = document.getElementById('output-title');
+
+  card.className = 'agent-card running';
+  badge.className = 'badge badge-running';
+  badge.textContent = 'Running...';
+  panel.style.display = 'block';
+  title.textContent = agents.find(a => a.name === name).label + ' — Running...';
+  output.textContent = 'Claude is thinking...';
+
+  try {
+    const r = await fetch(`${API}/api/agent/${name}/run`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ trigger, context: {} }),
+    });
+    const data = await r.json();
+
+    title.textContent = `${agents.find(a=>a.name===name).label} — Complete (${data.turns} turns, ${data.tokensUsed} tokens, ${(data.durationMs/1000).toFixed(1)}s)`;
+
+    let text = '';
+    if (data.actions?.length) {
+      text += `TOOLS CALLED (${data.actions.length}):\n`;
+      data.actions.forEach((a,i) => text += `  [${i+1}] ${a.tool} → ${a.success ? 'OK' : 'FAIL'}\n`);
+      text += '\n';
+    }
+    text += data.response || data.error || data.message || 'No response';
+    output.textContent = text;
+
+    // Refresh data after agent runs
+    setTimeout(loadData, 500);
+  } catch(e) {
+    output.textContent = 'ERROR: ' + e.message;
+    title.textContent = agents.find(a=>a.name===name).label + ' — Error';
+  }
+
+  card.className = 'agent-card';
+  badge.className = 'badge badge-ready';
+  badge.textContent = 'Ready';
+}
+
+function statusTag(status) {
+  const map = { posted:'tag-posted', assigned:'tag-assigned', dispatched:'tag-transit', in_transit:'tag-transit', delivered:'tag-delivered', paid:'tag-delivered',
+    expired:'tag-expired', expiring_soon:'tag-expiring', valid:'tag-valid', pending:'tag-pending', available:'tag-valid', on_load:'tag-assigned', suspended:'tag-expired' };
+  return `<span class="tag ${map[status]||''}">${status}</span>`;
+}
+
+async function loadData() {
+  try {
+    // Stats
+    const [loads, drivers, compliance, approvals, comms, pipeline] = await Promise.all([
+      api('/api/dashboard/loads/summary'),
+      api('/api/dashboard/drivers/summary'),
+      api('/api/dashboard/compliance/alerts'),
+      api('/api/approvals?status=pending'),
+      api('/api/dashboard/communications?limit=20'),
+      api('/api/dashboard/outreach/pipeline'),
+    ]);
+
+    const totalDrivers = drivers.statuses.reduce((s,d) => s + (d.status !== 'suspended' ? d.count : 0), 0);
+    const activeLoads = loads.pipeline.filter(p => ['assigned','dispatched','in_transit'].includes(p.status)).reduce((s,p) => s+p.count, 0);
+
+    document.getElementById('stat-drivers').textContent = totalDrivers;
+    document.getElementById('stat-revenue').textContent = '$' + Number(loads.totals.total_revenue).toLocaleString();
+    document.getElementById('stat-loads').textContent = activeLoads;
+    document.getElementById('stat-margin').textContent = '$' + Number(loads.totals.total_margin).toLocaleString();
+    document.getElementById('stat-compliance').textContent = compliance.expired.count + compliance.expiring_30_days.count;
+    document.getElementById('stat-approvals').textContent = approvals.count;
+    document.getElementById('stat-comms').textContent = comms.count;
+    document.getElementById('stat-prospects').textContent = pipeline.pipeline.reduce((s,p) => s+p.count, 0);
+
+    // Loads table — fetch full load data
+    const allLoads = await api('/api/dashboard/loads/summary');
+    // We need individual loads, let me use a different approach
+    const loadRows = document.getElementById('loads-table');
+    // Use agent endpoint to get loads
+    const loadsData = await fetch(`${API}/api/dashboard/loads/detail`, { headers }).then(r=>r.ok?r.json():null).catch(()=>null);
+
+    // Fallback: show pipeline summary
+    loadRows.innerHTML = '';
+    loads.pipeline.forEach(p => {
+      loadRows.innerHTML += `<tr><td colspan="3">${p.count} load(s)</td><td>$${Number(p.total_revenue).toLocaleString()}</td><td>${statusTag(p.status)}</td></tr>`;
+    });
+
+    // Drivers table
+    const driversTable = document.getElementById('drivers-table');
+    driversTable.innerHTML = '';
+    drivers.statuses.forEach(s => {
+      driversTable.innerHTML += `<tr><td colspan="2">${s.count} driver(s)</td><td>—</td><td>${statusTag(s.status)}</td></tr>`;
+    });
+
+    // Compliance
+    const compBody = document.getElementById('compliance-body');
+    let compHTML = '';
+    if (compliance.expired.count > 0) {
+      compHTML += '<div style="margin-bottom:10px"><strong style="color:var(--red)">EXPIRED</strong></div>';
+      compliance.expired.items.forEach(i => {
+        compHTML += `<div style="padding:6px 0;border-bottom:1px solid var(--border)"><strong>${i.first_name} ${i.last_name}</strong> — ${i.item_type} ${statusTag('expired')}<br><span style="font-size:0.75rem;color:var(--muted)">Expired: ${i.expiry_date}</span></div>`;
+      });
+    }
+    if (compliance.expiring_30_days.count > 0) {
+      compHTML += '<div style="margin:10px 0"><strong style="color:var(--orange)">EXPIRING SOON</strong></div>';
+      compliance.expiring_30_days.items.forEach(i => {
+        compHTML += `<div style="padding:6px 0;border-bottom:1px solid var(--border)"><strong>${i.first_name} ${i.last_name}</strong> — ${i.item_type} ${statusTag('expiring_soon')}<br><span style="font-size:0.75rem;color:var(--muted)">Expires: ${i.expiry_date}</span></div>`;
+      });
+    }
+    if (!compHTML) compHTML = '<div style="color:var(--green);text-align:center;padding:20px">All clear — no compliance issues</div>';
+    compBody.innerHTML = compHTML;
+
+    // Approvals
+    const appBody = document.getElementById('approvals-body');
+    if (approvals.count === 0) {
+      appBody.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px">No pending approvals</div>';
+    } else {
+      let appHTML = '';
+      approvals.approvals.forEach(a => {
+        appHTML += `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div><strong>${a.title}</strong><br><span style="font-size:0.75rem;color:var(--muted)">${a.agent} — ${a.action_type}</span></div>
+            <div>
+              <button class="btn btn-sm btn-green" onclick="resolveApproval(${a.id},'approved')">Approve</button>
+              <button class="btn btn-sm btn-red" onclick="resolveApproval(${a.id},'rejected')">Reject</button>
+            </div>
+          </div>
+          <div style="font-size:0.8rem;margin-top:6px">${a.summary}</div>
+        </div>`;
+      });
+      appBody.innerHTML = appHTML;
+    }
+
+    // Communications
+    const commsBody = document.getElementById('comms-body');
+    if (comms.count === 0) {
+      commsBody.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px">No communications yet</div>';
+    } else {
+      let commsHTML = '';
+      comms.communications.forEach(c => {
+        const icon = c.channel === 'sms' ? '💬' : c.channel === 'email' ? '📧' : c.channel === 'slack' ? '🔔' : '📝';
+        const dir = c.direction === 'outbound' ? '→' : '←';
+        commsHTML += `<div class="comm-item">
+          <div class="comm-meta">${icon} ${c.agent || 'system'} ${dir} ${c.to_addr || ''} · ${c.channel} · ${new Date(c.created_at).toLocaleString()}</div>
+          <div class="comm-body">${(c.body||'').substring(0, 200)}${(c.body||'').length > 200 ? '...' : ''}</div>
+        </div>`;
+      });
+      commsBody.innerHTML = commsHTML;
+    }
+
+    document.getElementById('server-status').textContent = 'Connected — Live';
+    document.getElementById('server-status').style.color = 'var(--green)';
+  } catch(e) {
+    document.getElementById('server-status').textContent = 'Disconnected';
+    document.getElementById('server-status').style.color = 'var(--red)';
+  }
+}
+
+async function resolveApproval(id, status) {
+  await fetch(`${API}/api/approvals/${id}`, {
+    method: 'PATCH', headers,
+    body: JSON.stringify({ status, resolvedBy: 'dashboard' }),
+  });
+  loadData();
+}
+
+// Load on start, refresh every 30s
+loadData();
+setInterval(loadData, 30000);
+</script>
+</body>
+</html>

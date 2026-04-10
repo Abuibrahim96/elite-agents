@@ -1,0 +1,141 @@
+{
+  "name": "Elite Trucking — Dispatch Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "new-load",
+        "responseMode": "responseNode"
+      },
+      "id": "dispatch-new-load",
+      "name": "New Load Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dispatch-delegate",
+        "responseMode": "responseNode"
+      },
+      "id": "dispatch-delegate",
+      "name": "Delegation Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 500]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dispatch-driver-reply",
+        "responseMode": "responseNode"
+      },
+      "id": "dispatch-driver-reply",
+      "name": "Driver Reply Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 700]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.AGENT_API_URL || 'http://localhost:3000'}}/api/agent/dispatch/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-api-key", "value": "={{$env.AGENT_API_KEY}}" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"trigger\": \"new_load\", \"context\": { \"load_id\": {{ $json.body?.load_id || 0 }} } }",
+        "options": { "timeout": 120000 }
+      },
+      "id": "dispatch-api-newload",
+      "name": "Call Dispatch (New Load)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.AGENT_API_URL || 'http://localhost:3000'}}/api/agent/dispatch/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-api-key", "value": "={{$env.AGENT_API_KEY}}" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"trigger\": \"delegation\", \"context\": {{ JSON.stringify($json.body || {}) }} }",
+        "options": { "timeout": 120000 }
+      },
+      "id": "dispatch-api-delegate",
+      "name": "Call Dispatch (Delegation)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.AGENT_API_URL || 'http://localhost:3000'}}/api/agent/dispatch/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-api-key", "value": "={{$env.AGENT_API_KEY}}" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"trigger\": \"driver_reply\", \"context\": {{ JSON.stringify($json.body || {}) }} }",
+        "options": { "timeout": 120000 }
+      },
+      "id": "dispatch-api-reply",
+      "name": "Call Dispatch (Driver Reply)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 700]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, agent: 'dispatch', response: $json.response }) }}"
+      },
+      "id": "dispatch-respond-1",
+      "name": "Respond (New Load)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, agent: 'dispatch', response: $json.response }) }}"
+      },
+      "id": "dispatch-respond-2",
+      "name": "Respond (Delegation)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [750, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, agent: 'dispatch', response: $json.response }) }}"
+      },
+      "id": "dispatch-respond-3",
+      "name": "Respond (Driver Reply)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [750, 700]
+    }
+  ],
+  "connections": {
+    "New Load Webhook": { "main": [[{ "node": "Call Dispatch (New Load)", "type": "main", "index": 0 }]] },
+    "Delegation Webhook": { "main": [[{ "node": "Call Dispatch (Delegation)", "type": "main", "index": 0 }]] },
+    "Driver Reply Webhook": { "main": [[{ "node": "Call Dispatch (Driver Reply)", "type": "main", "index": 0 }]] },
+    "Call Dispatch (New Load)": { "main": [[{ "node": "Respond (New Load)", "type": "main", "index": 0 }]] },
+    "Call Dispatch (Delegation)": { "main": [[{ "node": "Respond (Delegation)", "type": "main", "index": 0 }]] },
+    "Call Dispatch (Driver Reply)": { "main": [[{ "node": "Respond (Driver Reply)", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "elite-trucking" }]
+}

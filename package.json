@@ -1,0 +1,24 @@
+{
+  "name": "elite-agents",
+  "version": "1.0.0",
+  "description": "Elite Trucking AI Agent System — n8n + Claude API + Twilio + SendGrid",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "migrate": "node scripts/migrate.js",
+    "seed": "node scripts/seed.js",
+    "expire-approvals": "node scripts/expire-approvals.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@sendgrid/mail": "^8.1.0",
+    "better-sqlite3": "^12.8.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0",
+    "pg": "^8.13.0",
+    "twilio": "^5.4.0",
+    "uuid": "^11.0.0"
+  }
+}

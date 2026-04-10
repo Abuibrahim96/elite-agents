@@ -1,0 +1,117 @@
+{
+  "name": "Elite Trucking — Broker & Shipper Outreach Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 8 * * *" }]
+        }
+      },
+      "id": "outreach-schedule",
+      "name": "Daily 8AM Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "outreach-ondemand",
+        "responseMode": "responseNode"
+      },
+      "id": "outreach-webhook",
+      "name": "On-Demand Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 500]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "outreach-approval-callback",
+        "responseMode": "lastNode"
+      },
+      "id": "outreach-callback",
+      "name": "Approval Callback Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 700]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.AGENT_API_URL || 'http://localhost:3000'}}/api/agent/outreach/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-api-key", "value": "={{$env.AGENT_API_KEY}}" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"trigger\": \"scheduled\", \"context\": {} }",
+        "options": { "timeout": 120000 }
+      },
+      "id": "outreach-api-scheduled",
+      "name": "Call Outreach Agent (Scheduled)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.AGENT_API_URL || 'http://localhost:3000'}}/api/agent/outreach/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-api-key", "value": "={{$env.AGENT_API_KEY}}" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"trigger\": \"manual\", \"context\": {{ JSON.stringify($json.body || {}) }} }",
+        "options": { "timeout": 120000 }
+      },
+      "id": "outreach-api-manual",
+      "name": "Call Outreach Agent (Manual)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.AGENT_API_URL || 'http://localhost:3000'}}/api/agent/outreach/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-api-key", "value": "={{$env.AGENT_API_KEY}}" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"trigger\": \"approval_callback\", \"context\": {{ JSON.stringify($json.body || {}) }} }",
+        "options": { "timeout": 120000 }
+      },
+      "id": "outreach-api-callback",
+      "name": "Call Outreach (Approval Callback)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 700]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, response: $json.response }) }}"
+      },
+      "id": "outreach-respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [750, 500]
+    }
+  ],
+  "connections": {
+    "Daily 8AM Trigger": { "main": [[{ "node": "Call Outreach Agent (Scheduled)", "type": "main", "index": 0 }]] },
+    "On-Demand Webhook": { "main": [[{ "node": "Call Outreach Agent (Manual)", "type": "main", "index": 0 }]] },
+    "Approval Callback Webhook": { "main": [[{ "node": "Call Outreach (Approval Callback)", "type": "main", "index": 0 }]] },
+    "Call Outreach Agent (Manual)": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "elite-trucking" }]
+}

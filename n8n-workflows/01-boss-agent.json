@@ -1,0 +1,125 @@
+{
+  "name": "Elite Trucking — Boss Agent (Orchestrator)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 6 * * *" }]
+        }
+      },
+      "id": "boss-schedule",
+      "name": "Daily 6AM Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "boss-manual",
+        "responseMode": "responseNode"
+      },
+      "id": "boss-webhook",
+      "name": "Manual Trigger Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.AGENT_API_URL || 'http://localhost:3000'}}/api/agent/boss/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-api-key", "value": "={{$env.AGENT_API_KEY}}" }]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "trigger", "value": "scheduled" },
+            { "name": "context", "value": "{}" }
+          ]
+        },
+        "options": { "timeout": 120000 }
+      },
+      "id": "boss-api-scheduled",
+      "name": "Call Boss Agent (Scheduled)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.AGENT_API_URL || 'http://localhost:3000'}}/api/agent/boss/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-api-key", "value": "={{$env.AGENT_API_KEY}}" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"trigger\": \"manual\", \"context\": {{ JSON.stringify($json.body || {}) }} }",
+        "options": { "timeout": 120000 }
+      },
+      "id": "boss-api-manual",
+      "name": "Call Boss Agent (Manual)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "id": "check-actions", "leftValue": "={{ $json.actions?.length }}", "rightValue": 0, "operator": { "type": "number", "operation": "gt" } }
+          ]
+        }
+      },
+      "id": "boss-check-actions",
+      "name": "Has Actions?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.SLACK_WEBHOOK_URL}}",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"text\": \"📊 *Boss Agent Daily Briefing*\\n\\n\" + {{ $json.response?.substring(0, 3000) || 'No response' }} }"
+      },
+      "id": "boss-slack-notify",
+      "name": "Post to Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, response: $json.response }) }}"
+      },
+      "id": "boss-respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [750, 500]
+    }
+  ],
+  "connections": {
+    "Daily 6AM Trigger": { "main": [[{ "node": "Call Boss Agent (Scheduled)", "type": "main", "index": 0 }]] },
+    "Manual Trigger Webhook": { "main": [[{ "node": "Call Boss Agent (Manual)", "type": "main", "index": 0 }]] },
+    "Call Boss Agent (Scheduled)": { "main": [[{ "node": "Has Actions?", "type": "main", "index": 0 }]] },
+    "Has Actions?": {
+      "main": [
+        [{ "node": "Post to Slack", "type": "main", "index": 0 }],
+        [{ "node": "Post to Slack", "type": "main", "index": 0 }]
+      ]
+    },
+    "Call Boss Agent (Manual)": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "elite-trucking" }]
+}

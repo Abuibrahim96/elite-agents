@@ -1,0 +1,85 @@
+{
+  "name": "Elite Trucking — Carrier & Broker Acquisition Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 7 * * 1" }]
+        }
+      },
+      "id": "acquisition-schedule",
+      "name": "Monday 7AM Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "acquisition-delegate",
+        "responseMode": "responseNode"
+      },
+      "id": "acquisition-webhook",
+      "name": "Delegation Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.AGENT_API_URL || 'http://localhost:3000'}}/api/agent/acquisition/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-api-key", "value": "={{$env.AGENT_API_KEY}}" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"trigger\": \"scheduled\", \"context\": {} }",
+        "options": { "timeout": 120000 }
+      },
+      "id": "acquisition-api-scheduled",
+      "name": "Call Acquisition Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.AGENT_API_URL || 'http://localhost:3000'}}/api/agent/acquisition/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-api-key", "value": "={{$env.AGENT_API_KEY}}" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"trigger\": \"delegation\", \"context\": {{ JSON.stringify($json.body || {}) }} }",
+        "options": { "timeout": 120000 }
+      },
+      "id": "acquisition-api-delegate",
+      "name": "Call Acquisition (Delegation)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, response: $json.response }) }}"
+      },
+      "id": "acquisition-respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [750, 500]
+    }
+  ],
+  "connections": {
+    "Monday 7AM Trigger": { "main": [[{ "node": "Call Acquisition Agent", "type": "main", "index": 0 }]] },
+    "Delegation Webhook": { "main": [[{ "node": "Call Acquisition (Delegation)", "type": "main", "index": 0 }]] },
+    "Call Acquisition (Delegation)": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "elite-trucking" }]
+}
