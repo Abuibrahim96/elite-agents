@@ -223,6 +223,59 @@ async function addPriorityTask(task) {
   return { success: true, task };
 }
 
+async function completeTask(taskIdentifier) {
+  const client = getClient();
+  if (!client) return { error: 'Supabase not configured' };
+
+  const tasks = await getTasks();
+  const task = tasks.find(t =>
+    String(t.id) === String(taskIdentifier) ||
+    (t.title && t.title.toLowerCase().includes(String(taskIdentifier).toLowerCase()))
+  );
+  if (!task) return { error: `Task "${taskIdentifier}" not found` };
+
+  task.done = true;
+  task.completed_at = new Date().toISOString();
+
+  const { error } = await client.from('app_settings').upsert({ key: 'tasks', value: tasks }, { onConflict: 'key' });
+  if (error) return { error: error.message };
+  return { success: true, task };
+}
+
+async function removeTask(taskIdentifier) {
+  const client = getClient();
+  if (!client) return { error: 'Supabase not configured' };
+
+  const tasks = await getTasks();
+  const idx = tasks.findIndex(t =>
+    String(t.id) === String(taskIdentifier) ||
+    (t.title && t.title.toLowerCase().includes(String(taskIdentifier).toLowerCase()))
+  );
+  if (idx === -1) return { error: `Task "${taskIdentifier}" not found` };
+
+  const removed = tasks.splice(idx, 1)[0];
+  const { error } = await client.from('app_settings').upsert({ key: 'tasks', value: tasks }, { onConflict: 'key' });
+  if (error) return { error: error.message };
+  return { success: true, task: removed };
+}
+
+async function removeDriver(driverIdentifier) {
+  const client = getClient();
+  if (!client) return { error: 'Supabase not configured' };
+
+  const drivers = await getDrivers();
+  const driver = drivers.find(d =>
+    String(d.id) === String(driverIdentifier) ||
+    (d.name && d.name.toLowerCase().includes(String(driverIdentifier).toLowerCase())) ||
+    (`${d.first_name} ${d.last_name}`.toLowerCase().includes(String(driverIdentifier).toLowerCase()))
+  );
+  if (!driver) return { error: `Driver "${driverIdentifier}" not found` };
+
+  const { error } = await client.from('drivers').delete().eq('id', String(driver.id));
+  if (error) return { error: error.message };
+  return { success: true, driver };
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 //  HEALTH CHECK
 // ═════════════════════════════════════════════════════════════════════════════
@@ -237,11 +290,11 @@ async function isConnected() {
 }
 
 module.exports = {
-  getDrivers, getDriverById, addDriver, updateDriver,
+  getDrivers, getDriverById, addDriver, updateDriver, removeDriver,
   getLoads, addLoad, updateLoad,
   getContacts, addContact,
   getBrokerLoads, addBrokerLoad,
-  getTasks, addTask,
+  getTasks, addTask, completeTask, removeTask,
   getPriorityTasks, addPriorityTask,
   isConnected,
 };

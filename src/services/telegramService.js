@@ -51,6 +51,9 @@ SPECIAL COMMANDS (not routed to an agent):
 - "add_shipper" — User is adding a new shipper/broker/contact
 - "add_load" — User is adding a new load
 - "add_task" — User is adding a task or to-do item
+- "complete_task" — User wants to mark a task as done/completed
+- "remove_task" — User wants to delete/remove a task
+- "remove_driver" — User wants to remove/delete a driver from the system
 - "data_query" — User is asking about existing data (list drivers, show loads, etc.)
 
 IMPORTANT ROUTING RULES:
@@ -61,7 +64,7 @@ IMPORTANT ROUTING RULES:
 
 RESPOND WITH ONLY JSON (no markdown, no explanation):
 {
-  "route": "boss|dispatch|outreach|load_update|compliance|acquisition|add_driver|add_shipper|add_load|add_task|data_query",
+  "route": "boss|dispatch|outreach|load_update|compliance|acquisition|add_driver|add_shipper|add_load|add_task|complete_task|remove_task|remove_driver|data_query",
   "trigger": "manual|scheduled",
   "instructions": "rewrite the user's message as clear instructions for the agent",
   "data": { ... any structured data extracted from the message ... }
@@ -172,6 +175,12 @@ function initTelegram() {
         await handleAddLoad(chatId, route.data || {});
       } else if (route.route === 'add_task') {
         await handleAddTask(chatId, route.data || {}, route.instructions || '');
+      } else if (route.route === 'complete_task') {
+        await handleCompleteTask(chatId, route.data || {}, route.instructions || '');
+      } else if (route.route === 'remove_task') {
+        await handleRemoveTask(chatId, route.data || {}, route.instructions || '');
+      } else if (route.route === 'remove_driver') {
+        await handleRemoveDriver(chatId, route.data || {}, route.instructions || '');
       } else if (route.route === 'data_query') {
         await handleDataQuery(chatId, route.instructions);
       } else {
@@ -397,6 +406,70 @@ async function handleAddTask(chatId, data, instructions) {
     );
   } catch (err) {
     bot.sendMessage(chatId, `⚠️ Failed to add task: ${err.message}`);
+  }
+}
+
+async function handleCompleteTask(chatId, data, instructions) {
+  const identifier = data.title || data.task || data.id || instructions || '';
+  if (!identifier) {
+    return bot.sendMessage(chatId, `⚠️ Which task? Example: "Mark done: Follow up with XPO" or "Complete task 3"`);
+  }
+
+  try {
+    const result = await supa.completeTask(identifier);
+    if (result.error) throw new Error(result.error);
+
+    bot.sendMessage(chatId,
+      `✅ *Task Completed*\n\n` +
+      `Task: ${result.task.title || identifier}\n\n` +
+      `_Updated on elitetrucking.xyz dashboard_`,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (err) {
+    bot.sendMessage(chatId, `⚠️ Failed to complete task: ${err.message}`);
+  }
+}
+
+async function handleRemoveTask(chatId, data, instructions) {
+  const identifier = data.title || data.task || data.id || instructions || '';
+  if (!identifier) {
+    return bot.sendMessage(chatId, `⚠️ Which task? Example: "Remove task: Follow up with XPO" or "Delete task 3"`);
+  }
+
+  try {
+    const result = await supa.removeTask(identifier);
+    if (result.error) throw new Error(result.error);
+
+    bot.sendMessage(chatId,
+      `🗑️ *Task Removed*\n\n` +
+      `Task: ${result.task.title || identifier}\n\n` +
+      `_Removed from elitetrucking.xyz dashboard_`,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (err) {
+    bot.sendMessage(chatId, `⚠️ Failed to remove task: ${err.message}`);
+  }
+}
+
+async function handleRemoveDriver(chatId, data, instructions) {
+  const identifier = data.name || data.first_name || data.id || instructions || '';
+  if (!identifier) {
+    return bot.sendMessage(chatId, `⚠️ Which driver? Example: "Remove driver Hassan Abdullahi" or "Delete driver 3"`);
+  }
+
+  try {
+    const result = await supa.removeDriver(identifier);
+    if (result.error) throw new Error(result.error);
+
+    const name = result.driver.name || `${result.driver.first_name || ''} ${result.driver.last_name || ''}`.trim();
+    bot.sendMessage(chatId,
+      `🗑️ *Driver Removed*\n\n` +
+      `Driver: ${name}\n\n` +
+      `_Removed from elitetrucking.xyz dashboard_`,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (err) {
+    bot.sendMessage(chatId, `⚠️ Failed to remove driver: ${err.message}`);
   }
 }
 
