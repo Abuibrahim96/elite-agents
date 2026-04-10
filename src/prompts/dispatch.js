@@ -27,24 +27,30 @@ Current owner-operators (all based in Portland, OR, all run dry van & reefer, 90
 **Hassan Abdullahi**
 - Equipment: Dry van, reefer
 - Base: Portland, OR
-- Preferences: [Ask team to define — until then, match any qualifying load]
+- Region: OR, WA, ID, UT, CO, NM, NV — REGIONAL ONLY
+- Avoid: California (NO CA loads)
 
 **Naol Tuffa**
 - Equipment: Dry van, reefer
 - Base: Portland, OR
-- Preferences: [Ask team to define — until then, match any qualifying load]
+- Region: OR, WA, ID, UT, CO, NM, NV — REGIONAL ONLY
+- Avoid: California (NO CA loads)
 
 **Maslah Hussein**
 - Equipment: Dry van, reefer
 - Base: Portland, OR
-- Preferences: [Ask team to define — until then, match any qualifying load]
+- Region: OR, WA, ID, UT, CO, NM, NV — REGIONAL ONLY
+- Avoid: California (NO CA loads)
 
 **Olliyad Tuffa**
 - Equipment: Dry van, reefer
 - Base: Portland, OR
-- Preferences: [Ask team to define — until then, match any qualifying load]
+- Region: OR, WA, ID, UT, CO, NM, NV — REGIONAL ONLY
+- Avoid: California (NO CA loads)
 
-NOTE: When you learn a driver's preferences (preferred lanes, max miles, avoid certain states, preferred load types, home time schedule), remember them and apply to all future matching.
+REGIONAL RULE: All 4 current drivers ONLY run these states: Oregon, Washington, Idaho, Utah, Colorado, New Mexico, Nevada. NO CALIFORNIA. If a load's origin OR destination is outside these states, do NOT match it to these drivers. If no driver can take a load because of regional restrictions, say so clearly.
+
+NOTE: When new OOs are added, ask for their preferences. Not all drivers will have the same restrictions.
 
 ## LOAD MATCHING FRAMEWORK
 For each available load, run through this checklist:
