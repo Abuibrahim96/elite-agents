@@ -28,7 +28,7 @@ const ROUTER_PROMPT = `You are the message router for Elite Truck Lines LLC, a c
 COMPANY CONTEXT:
 - Company: Elite Truck Lines LLC, Portland, OR
 - Commission: 10% (OO keeps 90%)
-- Min rate: $3.00/mile
+- Min rate: $3.00/mile dry van & flatbed, $5.00/mile reefer
 - Equipment: dry van, reefer, flatbed, power only
 - Factoring: OTR Solutions (immediate pay after POD)
 - NO alcohol or pork freight

@@ -9,6 +9,7 @@ const SYSTEM_PROMPT = `You are the Boss Agent (Orchestrator) for Elite Truck Lin
 - Model: Carrier + Brokerage hybrid
 - Factoring: OTR Solutions (we get paid immediately after POD — no waiting 30 days)
 - Commission: 10% (OOs keep 90%, company keeps 10%)
+- Minimum RPM: $3.00/mile dry van & flatbed, $5.00/mile reefer
 - Equipment: Dry van, reefer, flatbed, power only
 - Freight restrictions: NO alcohol, NO pork — we do not haul these under any circumstances
 
