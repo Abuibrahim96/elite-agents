@@ -9,7 +9,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const config = require('../config');
 const { runAgent } = require('../claude');
-const { query, getOne, getMany } = require('../db');
+const supa = require('./supabaseService');
 
 // Agent runners
 const { runBossAgent } = require('../agents/boss');
@@ -48,8 +48,9 @@ THE 6 AGENTS:
 
 SPECIAL COMMANDS (not routed to an agent):
 - "add_driver" — User is adding a new owner-operator
-- "add_shipper" — User is adding a new shipper/broker
+- "add_shipper" — User is adding a new shipper/broker/contact
 - "add_load" — User is adding a new load
+- "add_task" — User is adding a task or to-do item
 - "data_query" — User is asking about existing data (list drivers, show loads, etc.)
 
 IMPORTANT ROUTING RULES:
@@ -60,7 +61,7 @@ IMPORTANT ROUTING RULES:
 
 RESPOND WITH ONLY JSON (no markdown, no explanation):
 {
-  "route": "boss|dispatch|outreach|load_update|compliance|acquisition|add_driver|add_shipper|add_load|data_query",
+  "route": "boss|dispatch|outreach|load_update|compliance|acquisition|add_driver|add_shipper|add_load|add_task|data_query",
   "trigger": "manual|scheduled",
   "instructions": "rewrite the user's message as clear instructions for the agent",
   "data": { ... any structured data extracted from the message ... }
@@ -169,6 +170,8 @@ function initTelegram() {
         await handleAddShipper(chatId, route.data || {});
       } else if (route.route === 'add_load') {
         await handleAddLoad(chatId, route.data || {});
+      } else if (route.route === 'add_task') {
+        await handleAddTask(chatId, route.data || {}, route.instructions || '');
       } else if (route.route === 'data_query') {
         await handleDataQuery(chatId, route.instructions);
       } else {
@@ -257,23 +260,35 @@ async function handleAddDriver(chatId, data) {
   }
 
   try {
-    const result = await query(
-      `INSERT INTO drivers (first_name, last_name, phone, email, mc_number, dot_number, trailer_type, home_city, home_state, current_city, current_state, status, percentage_rate)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'available', 0.85)`,
-      [data.first_name, data.last_name, data.phone || null, data.email || null,
-       data.mc_number || null, data.dot_number || null, data.trailer_type || 'dry_van',
-       data.home_city || null, data.home_state || null,
-       data.home_city || null, data.home_state || null]
-    );
+    const result = await supa.addDriver({
+      name: `${data.first_name} ${data.last_name}`,
+      first_name: data.first_name,
+      last_name: data.last_name,
+      phone: data.phone || '',
+      email: data.email || '',
+      mc_number: data.mc_number || '',
+      dot_number: data.dot_number || '',
+      truck_type: data.trailer_type || 'dry_van',
+      home_city: data.home_city || '',
+      home_state: data.home_state || '',
+      current_city: data.home_city || '',
+      current_state: data.home_state || '',
+      status: 'available',
+      percentage_rate: 0.90,
+      region: data.region || 'nationwide',
+    });
+
+    if (result.error) throw new Error(result.error);
 
     bot.sendMessage(chatId,
-      `✅ *New Driver Added*\n\n` +
+      `✅ *New Driver Added to Dashboard*\n\n` +
       `Name: ${data.first_name} ${data.last_name}\n` +
       `Equipment: ${data.trailer_type || 'dry_van'}\n` +
       `Base: ${data.home_city || '?'}, ${data.home_state || '?'}\n` +
       `Phone: ${data.phone || 'Not set'}\n` +
       `MC#: ${data.mc_number || 'Not set'}\n` +
-      `Rate: 85% (default)`,
+      `Rate: 90% (company keeps 10%)\n\n` +
+      `_Driver is now visible on elitetrucking.xyz dashboard_`,
       { parse_mode: 'Markdown' }
     );
   } catch (err) {
@@ -287,23 +302,29 @@ async function handleAddShipper(chatId, data) {
   }
 
   try {
-    await query(
-      `INSERT INTO shippers (company_name, contact_name, phone, email, type, credit_rating, avg_days_to_pay, payment_terms)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [data.company_name, data.contact_name || null, data.phone || null, data.email || null,
-       data.type || 'shipper', data.credit_rating || 'unknown', data.avg_days_to_pay || 30, 'Net 30']
-    );
+    const result = await supa.addContact({
+      company: data.company_name,
+      name: data.contact_name || '',
+      phone: data.phone || '',
+      email: data.email || '',
+      type: data.type || 'shipper',
+      credit_rating: data.credit_rating || 'unknown',
+      notes: data.notes || '',
+    });
+
+    if (result.error) throw new Error(result.error);
 
     bot.sendMessage(chatId,
-      `✅ *New Shipper Added*\n\n` +
+      `✅ *New Contact Added to Dashboard*\n\n` +
       `Company: ${data.company_name}\n` +
       `Contact: ${data.contact_name || 'Not set'}\n` +
       `Email: ${data.email || 'Not set'}\n` +
-      `Credit: ${data.credit_rating || 'unknown'}`,
+      `Type: ${data.type || 'shipper'}\n\n` +
+      `_Contact is now visible on elitetrucking.xyz dashboard_`,
       { parse_mode: 'Markdown' }
     );
   } catch (err) {
-    bot.sendMessage(chatId, `⚠️ Failed to add shipper: ${err.message}`);
+    bot.sendMessage(chatId, `⚠️ Failed to add contact: ${err.message}`);
   }
 }
 
@@ -313,22 +334,26 @@ async function handleAddLoad(chatId, data) {
   }
 
   try {
-    // Generate reference number
-    const last = await getOne("SELECT reference_number FROM loads ORDER BY id DESC LIMIT 1");
-    let num = 2001;
-    if (last?.reference_number?.startsWith('ELT-')) {
-      num = parseInt(last.reference_number.split('-')[1]) + 1;
-    }
-    const ref = `ELT-${num}`;
     const rpm = data.miles > 0 ? Math.round((data.rate / data.miles) * 100) / 100 : 0;
 
-    await query(
-      `INSERT INTO loads (reference_number, status, origin_city, origin_state, dest_city, dest_state, weight_lbs, equipment_type, rate, miles, rate_per_mile, commodity)
-       VALUES (?, 'posted', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [ref, data.origin_city, data.origin_state || '', data.dest_city, data.dest_state || '',
-       data.weight_lbs || null, data.equipment_type || 'dry_van', data.rate, data.miles || 0, rpm,
-       data.commodity || null]
-    );
+    const result = await supa.addLoad({
+      origin: `${data.origin_city}, ${data.origin_state || ''}`,
+      origin_city: data.origin_city,
+      origin_state: data.origin_state || '',
+      destination: `${data.dest_city}, ${data.dest_state || ''}`,
+      dest_city: data.dest_city,
+      dest_state: data.dest_state || '',
+      rate: data.rate,
+      miles: data.miles || 0,
+      rate_per_mile: rpm,
+      weight: data.weight_lbs || 0,
+      equipment_type: data.equipment_type || 'dry_van',
+      commodity: data.commodity || '',
+      status: 'pending',
+    });
+
+    if (result.error) throw new Error(result.error);
+    const ref = result.load?.reference_number || 'ELT-????';
 
     bot.sendMessage(chatId,
       `✅ *New Load Posted — ${ref}*\n\n` +
@@ -337,7 +362,7 @@ async function handleAddLoad(chatId, data) {
       `Miles: ${data.miles || '?'}\n` +
       `Equipment: ${data.equipment_type || 'dry_van'}\n` +
       `Weight: ${data.weight_lbs ? data.weight_lbs.toLocaleString() + ' lbs' : 'Not set'}\n\n` +
-      `_Want me to find a driver? Just say "assign load ${ref}"_`,
+      `_Load is now on the elitetrucking.xyz dashboard. Say "assign load ${ref}" to match a driver._`,
       { parse_mode: 'Markdown' }
     );
   } catch (err) {
@@ -345,31 +370,63 @@ async function handleAddLoad(chatId, data) {
   }
 }
 
+async function handleAddTask(chatId, data, instructions) {
+  const title = data.title || data.task || instructions || '';
+  if (!title) {
+    return bot.sendMessage(chatId, `⚠️ What's the task? Example: "Add task: Follow up with XPO Logistics about reefer loads"`);
+  }
+
+  try {
+    const result = await supa.addTask({
+      title: title,
+      dept: data.dept || 'Operations',
+      priority: data.priority || 'normal',
+      assignee: data.assignee || '',
+      notes: data.notes || '',
+    });
+
+    if (result.error) throw new Error(result.error);
+
+    bot.sendMessage(chatId,
+      `✅ *Task Added to Dashboard*\n\n` +
+      `Task: ${title}\n` +
+      `Dept: ${data.dept || 'Operations'}\n` +
+      `Priority: ${data.priority || 'normal'}\n\n` +
+      `_Task is now visible on elitetrucking.xyz dashboard_`,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (err) {
+    bot.sendMessage(chatId, `⚠️ Failed to add task: ${err.message}`);
+  }
+}
+
 async function handleDataQuery(chatId, queryType) {
   try {
     if (queryType === 'list_drivers') {
-      const drivers = await getMany('SELECT id, first_name, last_name, trailer_type, current_city, current_state, status FROM drivers ORDER BY status, last_name');
+      const drivers = await supa.getDrivers();
       if (!drivers.length) return bot.sendMessage(chatId, '📋 No drivers in the system yet.');
 
-      const statusIcons = { available: '🟢', on_load: '🔵', off_duty: '⚪', suspended: '🔴', maintenance: '🟡' };
+      const statusIcons = { available: '🟢', on_load: '🔵', 'on-load': '🔵', off_duty: '⚪', suspended: '🔴', maintenance: '🟡' };
       let msg = '🚛 *Drivers*\n\n';
       drivers.forEach(d => {
-        msg += `${statusIcons[d.status] || '⚪'} *${d.first_name} ${d.last_name}* — ${d.trailer_type || '?'}\n`;
-        msg += `   ${d.current_city || '?'}, ${d.current_state || '?'} · ${d.status}\n\n`;
+        const name = d.name || `${d.first_name || ''} ${d.last_name || ''}`.trim() || '?';
+        msg += `${statusIcons[d.status] || '⚪'} *${name}* — ${d.truck_type || d.trailer_type || '?'}\n`;
+        msg += `   ${d.current_city || d.home_city || '?'}, ${d.current_state || d.home_state || '?'} · ${d.status || 'unknown'}\n\n`;
       });
       return bot.sendMessage(chatId, msg, { parse_mode: 'Markdown' });
     }
 
     if (queryType === 'list_loads') {
-      const loads = await getMany('SELECT reference_number, origin_city, origin_state, dest_city, dest_state, rate, rate_per_mile, status, equipment_type FROM loads ORDER BY status, id DESC LIMIT 15');
+      const loads = await supa.getLoads();
       if (!loads.length) return bot.sendMessage(chatId, '📋 No loads in the system yet.');
 
-      const statusIcons = { posted: '📦', assigned: '🟡', dispatched: '🔵', in_transit: '🚚', delivered: '✅', invoiced: '💰', paid: '💵', cancelled: '❌' };
+      const statusIcons = { pending: '📦', posted: '📦', assigned: '🟡', dispatched: '🔵', 'in-transit': '🚚', in_transit: '🚚', 'picked-up': '🚚', delivered: '✅', invoiced: '💰', paid: '💵', cancelled: '❌' };
       let msg = '📦 *Loads*\n\n';
-      loads.forEach(l => {
-        msg += `${statusIcons[l.status] || '📋'} *${l.reference_number}* — ${l.status}\n`;
-        msg += `   ${l.origin_city},${l.origin_state} → ${l.dest_city},${l.dest_state}\n`;
-        msg += `   $${l.rate?.toLocaleString() || '?'} · $${l.rate_per_mile || '?'}/mi · ${l.equipment_type || '?'}\n\n`;
+      loads.slice(0, 15).forEach(l => {
+        const ref = l.reference_number || l.id || '?';
+        msg += `${statusIcons[l.status] || '📋'} *${ref}* — ${l.status || '?'}\n`;
+        msg += `   ${l.origin || l.origin_city || '?'} → ${l.destination || l.dest_city || '?'}\n`;
+        msg += `   $${l.rate?.toLocaleString() || '?'} · $${l.rate_per_mile || '?'}/mi · ${l.equipment_type || l.type || '?'}\n\n`;
       });
       return bot.sendMessage(chatId, msg, { parse_mode: 'Markdown' });
     }

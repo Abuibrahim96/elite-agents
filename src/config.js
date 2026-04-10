@@ -25,6 +25,10 @@ const config = {
   slackApprovalChannel: process.env.SLACK_APPROVAL_CHANNEL || '',
   slackOpsChannel: process.env.SLACK_OPS_CHANNEL || '',
 
+  // Supabase (shared with dashboard)
+  supabaseUrl: process.env.SUPABASE_URL || 'https://xhgaplwhsvzcqebfpfux.supabase.co',
+  supabaseKey: process.env.SUPABASE_KEY || '',
+
   // Telegram
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
   telegramGroupId: process.env.TELEGRAM_GROUP_ID || '',
