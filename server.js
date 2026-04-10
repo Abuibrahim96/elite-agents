@@ -14,7 +14,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: ['https://elitetrucking.xyz', 'http://elitetrucking.xyz', 'http://localhost:3000', 'http://localhost:5173'],
+  origin: true,
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
