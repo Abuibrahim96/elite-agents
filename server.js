@@ -47,6 +47,12 @@ app.listen(config.port, '0.0.0.0', () => {
   console.log(`  Running on port ${config.port}`);
   console.log(`  Stub mode: ${config.stubMode ? 'ON (no real SMS/email)' : 'OFF (LIVE)'}`);
   console.log(`========================================\n`);
+
+  // Start Telegram bot if token is set
+  if (config.telegramBotToken) {
+    const { initTelegram } = require('./src/services/telegramService');
+    initTelegram();
+  }
 });
 
 module.exports = app;

@@ -25,6 +25,10 @@ const config = {
   slackApprovalChannel: process.env.SLACK_APPROVAL_CHANNEL || '',
   slackOpsChannel: process.env.SLACK_OPS_CHANNEL || '',
 
+  // Telegram
+  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
+  telegramGroupId: process.env.TELEGRAM_GROUP_ID || '',
+
   // n8n
   n8nBaseUrl: process.env.N8N_BASE_URL || 'http://localhost:5678',
 
