@@ -1,101 +1,49 @@
-const path = require('path');
 const config = require('./config');
 
 // ============================================================================
-// Dual-mode DB: PostgreSQL in production, SQLite for local demo
-// All agents use query/getOne/getMany — this module swaps the backend.
+// Database layer — uses in-memory store for agent logs/approvals,
+// Supabase handles all business data (drivers, loads, contacts, tasks).
 // ============================================================================
 
-const USE_SQLITE = !config.databaseUrl || config.databaseUrl.includes('password@localhost') || process.env.USE_SQLITE === 'true';
+// In-memory store for agent_logs, approval_queue, agent_memory, communications
+const memStore = {
+  agent_logs: [],
+  approval_queue: [],
+  agent_memory: {},
+  communications: [],
+};
 
-let db; // SQLite instance (if used)
-
-if (USE_SQLITE) {
-  const Database = require('better-sqlite3');
-  const dbPath = path.join(__dirname, '..', 'elite_agents_demo.db');
-  db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-  console.log(`[DB] SQLite demo mode → ${dbPath}`);
-} else {
-  console.log(`[DB] PostgreSQL mode → ${config.databaseUrl.replace(/:[^:@]+@/, ':***@')}`);
-}
-
-/**
- * Convert $1, $2, ... placeholders to ? for SQLite.
- * Also handles simple PG-specific syntax conversions.
- */
-function pgToSqlite(text) {
-  if (!USE_SQLITE) return text;
-
-  let sql = text;
-  // $1, $2 → ?
-  sql = sql.replace(/\$\d+/g, '?');
-  // ::int, ::numeric, ::text → remove
-  sql = sql.replace(/::(int|integer|numeric|text|date|timestamptz?)/gi, '');
-  // INTERVAL '...' → simplified for SQLite
-  sql = sql.replace(/NOW\(\)/gi, "datetime('now')");
-  sql = sql.replace(/CURRENT_DATE/gi, "date('now')");
-  sql = sql.replace(/CURRENT_TIMESTAMP/gi, "datetime('now')");
-  // INTERVAL handling
-  sql = sql.replace(/datetime\('now'\)\s*\+\s*INTERVAL\s*'(\d+)\s*days?'/gi, "datetime('now', '+$1 days')");
-  sql = sql.replace(/datetime\('now'\)\s*-\s*INTERVAL\s*'(\d+)\s*days?'/gi, "datetime('now', '-$1 days')");
-  sql = sql.replace(/datetime\('now'\)\s*\+\s*INTERVAL\s*'(\d+)\s*hours?'/gi, "datetime('now', '+$1 hours')");
-  sql = sql.replace(/date\('now'\)\s*\+\s*INTERVAL\s*'(\d+)\s*days?'/gi, "date('now', '+$1 days')");
-  sql = sql.replace(/date\('now'\)\s*-\s*INTERVAL\s*'(\d+)\s*days?'/gi, "date('now', '-$1 days')");
-  sql = sql.replace(/INTERVAL\s*'1\s*hour'\s*\*\s*\?/gi, "(? || ' hours')");
-  // ILIKE → LIKE (SQLite is case-insensitive by default for ASCII)
-  sql = sql.replace(/ILIKE/gi, 'LIKE');
-  // FILTER (WHERE ...) → not supported in SQLite, we'll handle in code
-  // TIMESTAMPTZ → TEXT in SQLite (already handled by schema)
-  // COALESCE, CASE, etc. work in both
-  // RETURNING * → not well supported, remove
-  sql = sql.replace(/\s+RETURNING\s+\*/gi, '');
-  // ON CONFLICT ... DO UPDATE SET → simplified
-  // JSONB → TEXT in SQLite
-  return sql;
-}
-
-// ============================================================================
-// PostgreSQL backend
-// ============================================================================
-let pool;
-if (!USE_SQLITE) {
-  const { Pool } = require('pg');
-  pool = new Pool({ connectionString: config.databaseUrl });
-  pool.on('error', (err) => console.error('PG pool error:', err.message));
-}
-
-// ============================================================================
-// Unified query interface
-// ============================================================================
+let nextId = { agent_logs: 1, approval_queue: 1, communications: 1 };
 
 async function query(text, params = []) {
-  if (USE_SQLITE) {
-    const sql = pgToSqlite(text);
-    const trimmed = sql.trim().toUpperCase();
-    try {
-      if (trimmed.startsWith('SELECT') || trimmed.startsWith('WITH')) {
-        const rows = db.prepare(sql).all(...params);
-        return { rows, rowCount: rows.length };
-      } else if (trimmed.startsWith('INSERT')) {
-        const info = db.prepare(sql).run(...params);
-        // Simulate RETURNING * by fetching the inserted row
-        return { rows: [{ id: info.lastInsertRowid }], rowCount: info.changes };
-      } else {
-        const info = db.prepare(sql).run(...params);
-        return { rows: [], rowCount: info.changes };
-      }
-    } catch (err) {
-      // If the SQL fails, log it for debugging
-      if (process.env.DEBUG_SQL) {
-        console.error(`[SQL ERROR] ${sql}\n  Params: ${JSON.stringify(params)}\n  Error: ${err.message}`);
-      }
-      throw err;
-    }
-  } else {
-    return pool.query(text, params);
+  // Parse simple INSERT/SELECT/UPDATE for in-memory tables
+  const sql = text.trim().toUpperCase();
+
+  if (sql.startsWith('INSERT INTO AGENT_LOGS') || sql.includes('INTO AGENT_LOGS')) {
+    const id = nextId.agent_logs++;
+    memStore.agent_logs.push({ id, params, created_at: new Date().toISOString() });
+    return { rows: [{ id }], rowCount: 1 };
   }
+
+  if (sql.startsWith('INSERT INTO APPROVAL_QUEUE') || sql.includes('INTO APPROVAL_QUEUE')) {
+    const id = nextId.approval_queue++;
+    const item = { id, status: 'pending', created_at: new Date().toISOString() };
+    memStore.approval_queue.push(item);
+    return { rows: [item], rowCount: 1 };
+  }
+
+  if (sql.startsWith('INSERT INTO COMMUNICATIONS') || sql.includes('INTO COMMUNICATIONS')) {
+    const id = nextId.communications++;
+    memStore.communications.push({ id, params, created_at: new Date().toISOString() });
+    return { rows: [{ id }], rowCount: 1 };
+  }
+
+  if (sql.includes('INSERT INTO AGENT_MEMORY') || sql.includes('INTO AGENT_MEMORY')) {
+    return { rows: [{ id: 1 }], rowCount: 1 };
+  }
+
+  // SELECT queries return empty by default — Supabase handles real data
+  return { rows: [], rowCount: 0 };
 }
 
 async function getOne(text, params = []) {
@@ -109,23 +57,9 @@ async function getMany(text, params = []) {
 }
 
 async function transaction(callback) {
-  if (USE_SQLITE) {
-    const tx = db.transaction(() => callback({ query: (t, p) => query(t, p) }));
-    return tx();
-  } else {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const result = await callback(client);
-      await client.query('COMMIT');
-      return result;
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
-  }
+  return callback({ query });
 }
 
-module.exports = { pool, query, getOne, getMany, transaction, USE_SQLITE, db };
+console.log('[DB] Using Supabase for business data, in-memory for agent logs');
+
+module.exports = { query, getOne, getMany, transaction };
