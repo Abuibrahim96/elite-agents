@@ -57,6 +57,9 @@ SPECIAL COMMANDS (not routed to an agent):
 - "data_query" — User is asking about existing data (list drivers, show loads, etc.)
 
 IMPORTANT ROUTING RULES:
+- If the message says "fire", "remove", "delete", "terminate", "drop", "get rid of" followed by a person's name → ALWAYS route to "remove_driver". Do NOT route to boss or any agent. Example: "fire maslah" → remove_driver with data.name = "maslah"
+- If the message says "done", "complete", "finished", "mark done" about a task → ALWAYS route to "complete_task"
+- If the message says "delete task", "remove task", "cancel task" → ALWAYS route to "remove_task"
 - If the message mentions checking a broker's DOT/MC, payment history, or reputation → route to "acquisition"
 - If the message mentions any alcohol or pork freight → route to "dispatch" with instructions to REJECT it
 - If the message mentions factoring, OTR Solutions, or payment → consider "boss" or "dispatch" depending on context
