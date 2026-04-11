@@ -209,13 +209,17 @@ function initTelegram() {
       calledAgent = activeAgent[chatId];
       command = text.trim();
     }
+    // No callsign and no active agent — still try to handle common commands
+    else {
+      command = text.trim();
+    }
 
-    // ── If we have a command (either from callsign or context), handle it directly ──
-    if (command && (calledAgent || true)) {
+    // ── Handle commands — either from callsign, context, or standalone ──
+    if (command) {
       const cmdLower = command.toLowerCase();
 
-      // ADD DRIVER
-      const addDriverCmd = command.match(/(?:add|new|hire|onboard|bring on)\s+(?:driver\s+|oo\s+)?(.+)/i);
+      // ADD DRIVER — catches: "add driver X", "new oo X", "add new oo X", "hire X", "onboard X"
+      const addDriverCmd = command.match(/(?:add\s+new\s+oo|add\s+new\s+driver|add|new|hire|onboard|bring on)\s+(?:driver\s+|oo\s+)?(.+)/i);
       if (addDriverCmd) {
         const detail = addDriverCmd[1].trim();
         const parts = detail.split(',').map(s => s.trim());
@@ -382,45 +386,38 @@ async function handleAgentRun(chatId, agentName, trigger, instructions) {
 }
 
 async function handleAddDriver(chatId, data) {
-  const required = ['first_name', 'last_name'];
-  for (const field of required) {
-    if (!data[field]) {
-      return bot.sendMessage(chatId, `⚠️ Missing required field: ${field}\n\nExample: "Add new OO John Smith, dry van, Atlanta GA, 555-0101, MC-1234567"`);
-    }
+  // Only requirement: some kind of name
+  const name = (`${data.first_name || ''} ${data.last_name || ''}`).trim() || data.name || '';
+  if (!name) {
+    return bot.sendMessage(chatId, `👤 What's their name?`);
   }
+
+  const nameParts = name.split(/\s+/);
+  const firstName = nameParts[0] || name;
+  const lastName = nameParts.slice(1).join(' ') || 'pending';
 
   try {
     const result = await supa.addDriver({
-      name: `${data.first_name} ${data.last_name}`,
-      first_name: data.first_name,
-      last_name: data.last_name,
-      phone: data.phone || '',
-      email: data.email || '',
-      mc_number: data.mc_number || '',
-      dot_number: data.dot_number || '',
-      truck_type: data.trailer_type || 'dry_van',
-      home_city: data.home_city || '',
-      home_state: data.home_state || '',
-      current_city: data.home_city || '',
-      current_state: data.home_state || '',
+      name: `${firstName} ${lastName}`.trim(),
+      first_name: firstName,
+      last_name: lastName,
+      phone: data.phone || 'pending',
+      email: data.email || 'pending',
+      mc_number: data.mc_number || 'pending',
+      dot_number: data.dot_number || 'pending',
+      truck_type: data.trailer_type || 'pending',
+      home_city: data.home_city || 'pending',
+      home_state: data.home_state || 'pending',
+      current_city: data.home_city || 'pending',
+      current_state: data.home_state || 'pending',
       status: 'available',
       percentage_rate: 0.90,
-      region: data.region || 'nationwide',
+      region: data.region || 'pending',
     });
 
     if (result.error) throw new Error(result.error);
 
-    bot.sendMessage(chatId,
-      `✅ *New Driver Added to Dashboard*\n\n` +
-      `Name: ${data.first_name} ${data.last_name}\n` +
-      `Equipment: ${data.trailer_type || 'dry_van'}\n` +
-      `Base: ${data.home_city || '?'}, ${data.home_state || '?'}\n` +
-      `Phone: ${data.phone || 'Not set'}\n` +
-      `MC#: ${data.mc_number || 'Not set'}\n` +
-      `Rate: 90% (company keeps 10%)\n\n` +
-      `_Driver is now visible on elitetrucking.xyz dashboard_`,
-      { parse_mode: 'Markdown' }
-    );
+    bot.sendMessage(chatId, `✓ ${firstName} ${lastName} added.`);
   } catch (err) {
     bot.sendMessage(chatId, `⚠️ Failed to add driver: ${err.message}`);
   }
