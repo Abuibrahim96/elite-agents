@@ -185,25 +185,89 @@ function initTelegram() {
     // Catches simple commands instantly without wasting an API call
     const lower = text.toLowerCase().trim();
 
-    // "fire maslah", "remove hassan", "delete driver naol", "terminate olliyad"
-    const removeMatch = lower.match(/^(?:fire|remove|delete|terminate|drop|kick|get rid of)\s+(?:driver\s+)?(.+)$/i);
-    if (removeMatch) {
+    // ── REMOVE DRIVER: fire/remove/delete/terminate + name ──
+    const removeMatch = lower.match(/(?:fire|remove|delete|terminate|drop|kick|get rid of)\s+(?:driver\s+)?(?:named?\s+)?(.+)/i);
+    if (removeMatch && !lower.includes('task') && !lower.includes('load')) {
       return handleRemoveDriver(chatId, {}, removeMatch[1].trim());
     }
 
-    // "add driver" with no details — ask for info
-    if (/^(?:add|new|hire|onboard)\s+(?:driver|oo|owner.?operator)\s*$/i.test(lower)) {
-      return bot.sendMessage(chatId,
-        `👤 *New Driver — What's their info?*\n\n` +
-        `Reply with:\n` +
-        `Name, equipment type, home city state\n\n` +
-        `Example: "Hassan Abdullahi, dry van, Portland OR"`,
-        { parse_mode: 'Markdown' }
-      );
+    // ── ADD DRIVER: any message about adding a driver ──
+    // Catches: "add driver", "add driver hassan", "add maslah hussein to driver roster",
+    // "can u add a driver", "just add maslah hussein", "new driver", "hire driver", etc.
+    const wantsToAddDriver = /(?:add|new|hire|onboard|put|register|sign up|bring on)\s+.*(?:driver|oo|owner.?operator|roster|fleet)/i.test(lower)
+      || /(?:driver|oo)\s+.*(?:add|new|hire|onboard|register)/i.test(lower)
+      || /^(?:add|new|hire|onboard)\s+(?:driver|oo)/i.test(lower);
+
+    if (wantsToAddDriver) {
+      // Try to extract a name from the message
+      const namePatterns = [
+        /(?:add|new|hire|onboard|put|register|bring on)\s+(?:driver\s+|oo\s+)?(?:named?\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/,
+        /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s+(?:to|as|into)\s+(?:driver|roster|fleet)/,
+        /(?:add|just add|put)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/,
+      ];
+
+      let foundName = null;
+      for (const pat of namePatterns) {
+        const m = text.match(pat);
+        if (m) { foundName = m[1].trim(); break; }
+      }
+
+      if (!foundName) {
+        // No name found — ask for it
+        return bot.sendMessage(chatId,
+          `👤 *Add Driver — What's their name?*\n\nJust type their full name:\nExample: "Hassan Abdullahi"`,
+          { parse_mode: 'Markdown' }
+        );
+      }
+
+      // Parse any extra details from the message
+      const nameParts = foundName.split(/\s+/);
+      const data = {
+        first_name: nameParts[0],
+        last_name: nameParts.slice(1).join(' '),
+        trailer_type: 'dry_van',
+        home_city: 'Portland',
+        home_state: 'OR',
+      };
+      if (lower.includes('reefer')) data.trailer_type = 'reefer';
+      if (lower.includes('flatbed')) data.trailer_type = 'flatbed';
+      if (lower.includes('power only')) data.trailer_type = 'power_only';
+
+      return handleAddDriver(chatId, data);
     }
 
-    // "add driver john smith, dry van, portland or"
-    const addDriverMatch = lower.match(/^(?:add|new|hire|onboard)\s+(?:driver|oo|owner.?operator)\s+(.+)$/i);
+    // ── ADD LOAD: any message about adding a load ──
+    const addLoadMatch = lower.match(/(?:add|new|post)\s+(?:a\s+)?load\s+(.+)/i);
+    if (addLoadMatch || /^(?:add|new|post)\s+(?:a\s+)?load\s*$/i.test(lower)) {
+      if (!addLoadMatch) {
+        return bot.sendMessage(chatId,
+          `📦 *Add Load — What are the details?*\n\nExample: "Portland OR to Boise ID, dry van, $3500, 430 miles"`,
+          { parse_mode: 'Markdown' }
+        );
+      }
+      // Fall through to Claude router to parse load details
+    }
+
+    // ── ADD TASK ──
+    const addTaskMatch = lower.match(/(?:add|new|create)\s+(?:a\s+)?task\s*:?\s*(.+)/i);
+    if (addTaskMatch) {
+      return handleAddTask(chatId, { title: addTaskMatch[1].trim() }, '');
+    }
+    if (/^(?:add|new|create)\s+(?:a\s+)?task\s*$/i.test(lower)) {
+      return bot.sendMessage(chatId, `📝 *Add Task — What's the task?*\n\nExample: "Follow up with XPO about reefer loads"`, { parse_mode: 'Markdown' });
+    }
+
+    // ── COMPLETE TASK ──
+    const doneMatch = lower.match(/(?:done|mark done|complete|finished)\s*:?\s*(.+)/i);
+    if (doneMatch) {
+      return handleCompleteTask(chatId, {}, doneMatch[1].trim());
+    }
+
+    // ── REMOVE TASK ──
+    const removeTaskMatch = lower.match(/(?:delete|remove|cancel)\s+task\s*:?\s*(.+)/i);
+    if (removeTaskMatch) {
+      return handleRemoveTask(chatId, {}, removeTaskMatch[1].trim());
+    }
     if (addDriverMatch) {
       const parts = addDriverMatch[1].split(',').map(s => s.trim());
       const nameParts = (parts[0] || '').split(/\s+/);
@@ -233,18 +297,6 @@ function initTelegram() {
         }
       }
       return handleAddDriver(chatId, data);
-    }
-
-    // "done: task name" or "mark done task name" or "complete task name"
-    const doneMatch = lower.match(/^(?:done|mark done|complete|finished)\s*:?\s*(.+)$/i);
-    if (doneMatch) {
-      return handleCompleteTask(chatId, {}, doneMatch[1].trim());
-    }
-
-    // "delete task: name" or "remove task name"
-    const removeTaskMatch = lower.match(/^(?:delete|remove|cancel)\s+task\s*:?\s*(.+)$/i);
-    if (removeTaskMatch) {
-      return handleRemoveTask(chatId, {}, removeTaskMatch[1].trim());
     }
 
     // Smart routing — use Claude for everything else
