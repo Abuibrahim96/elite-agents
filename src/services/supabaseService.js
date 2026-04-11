@@ -12,8 +12,15 @@ const config = require('../config');
 let sb = null;
 
 function getClient() {
-  if (!sb && config.supabaseUrl && config.supabaseKey) {
-    sb = createClient(config.supabaseUrl, config.supabaseKey);
+  if (!sb) {
+    const url = config.supabaseUrl || process.env.SUPABASE_URL || '';
+    const key = config.supabaseKey || process.env.SUPABASE_KEY || '';
+    if (url && key) {
+      sb = createClient(url, key);
+      console.log('[Supabase] Connected to', url);
+    } else {
+      console.log('[Supabase] Missing config — URL:', !!url, 'KEY:', !!key);
+    }
   }
   return sb;
 }
@@ -37,7 +44,7 @@ async function getDriverById(id) {
 
 async function addDriver(driver) {
   const client = getClient();
-  if (!client) return { error: 'Supabase not configured' };
+  if (!client) return { error: 'Supabase not configured — check SUPABASE_KEY in Railway variables' };
 
   // Generate ID
   const drivers = await getDrivers();
