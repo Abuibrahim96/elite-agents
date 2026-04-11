@@ -175,10 +175,20 @@ function initTelegram() {
       return handleRemoveDriver(chatId, {}, removeMatch[1].trim());
     }
 
+    // "add driver" with no details — ask for info
+    if (/^(?:add|new|hire|onboard)\s+(?:driver|oo|owner.?operator)\s*$/i.test(lower)) {
+      return bot.sendMessage(chatId,
+        `👤 *New Driver — What's their info?*\n\n` +
+        `Reply with:\n` +
+        `Name, equipment type, home city state\n\n` +
+        `Example: "Hassan Abdullahi, dry van, Portland OR"`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+
     // "add driver john smith, dry van, portland or"
     const addDriverMatch = lower.match(/^(?:add|new|hire|onboard)\s+(?:driver|oo|owner.?operator)\s+(.+)$/i);
     if (addDriverMatch) {
-      // Still need Claude to parse the details, but force the route
       await bot.sendChatAction(chatId, 'typing');
       const route = await routeMessage(text);
       return handleAddDriver(chatId, route.data || {});
