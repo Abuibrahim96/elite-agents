@@ -165,7 +165,38 @@ function initTelegram() {
       return handleAgentRun(chatId, agentName, 'manual', null);
     }
 
-    // Smart routing — use Claude to figure out what the user wants
+    // ── Quick pattern matching BEFORE Claude router ──
+    // Catches simple commands instantly without wasting an API call
+    const lower = text.toLowerCase().trim();
+
+    // "fire maslah", "remove hassan", "delete driver naol", "terminate olliyad"
+    const removeMatch = lower.match(/^(?:fire|remove|delete|terminate|drop|kick|get rid of)\s+(?:driver\s+)?(.+)$/i);
+    if (removeMatch) {
+      return handleRemoveDriver(chatId, {}, removeMatch[1].trim());
+    }
+
+    // "add driver john smith, dry van, portland or"
+    const addDriverMatch = lower.match(/^(?:add|new|hire|onboard)\s+(?:driver|oo|owner.?operator)\s+(.+)$/i);
+    if (addDriverMatch) {
+      // Still need Claude to parse the details, but force the route
+      await bot.sendChatAction(chatId, 'typing');
+      const route = await routeMessage(text);
+      return handleAddDriver(chatId, route.data || {});
+    }
+
+    // "done: task name" or "mark done task name" or "complete task name"
+    const doneMatch = lower.match(/^(?:done|mark done|complete|finished)\s*:?\s*(.+)$/i);
+    if (doneMatch) {
+      return handleCompleteTask(chatId, {}, doneMatch[1].trim());
+    }
+
+    // "delete task: name" or "remove task name"
+    const removeTaskMatch = lower.match(/^(?:delete|remove|cancel)\s+task\s*:?\s*(.+)$/i);
+    if (removeTaskMatch) {
+      return handleRemoveTask(chatId, {}, removeTaskMatch[1].trim());
+    }
+
+    // Smart routing — use Claude for everything else
     try {
       await bot.sendChatAction(chatId, 'typing');
       const route = await routeMessage(text);
