@@ -36,6 +36,7 @@ app.get('/health', (req, res) => {
     supabase_url: !!process.env.SUPABASE_URL,
     supabase_key: !!process.env.SUPABASE_KEY,
     supabase_key_len: (process.env.SUPABASE_KEY || '').length,
+    env_count: Object.keys(process.env).filter(k => k.startsWith('SUPA') || k.startsWith('API') || k.startsWith('ANTHROPIC') || k.startsWith('TELEGRAM')).join(','),
   });
 });
 
