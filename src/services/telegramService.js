@@ -51,9 +51,9 @@ SPECIAL COMMANDS (not routed to an agent):
 - "add_shipper" — User is adding a new shipper/broker/contact
 - "add_load" — User is adding a new load
 - "add_task" — User is adding a task or to-do item
-- "complete_task" — User wants to mark a task as done/completed
-- "remove_task" — User wants to delete/remove a task
-- "remove_driver" — User wants to remove/delete a driver from the system
+- "complete_task" — User wants to mark a task as done/completed/finished
+- "remove_task" — User wants to delete, remove, cancel, or get rid of a task
+- "remove_driver" — User wants to remove, delete, terminate, fire, drop, or get rid of a driver from the system. ANY word meaning "get this person out" should route here.
 - "data_query" — User is asking about existing data (list drivers, show loads, etc.)
 
 IMPORTANT ROUTING RULES:
