@@ -109,8 +109,24 @@ function initTelegram() {
     return null;
   }
 
-  bot = new TelegramBot(config.telegramBotToken, { polling: true });
-  console.log('[Telegram] Bot started — listening for messages');
+  bot = new TelegramBot(config.telegramBotToken, { polling: false });
+
+  // Clear any existing webhook, then start polling
+  bot.deleteWebHook().then(() => {
+    bot.startPolling({ restart: true });
+    console.log('[Telegram] Bot started — listening for messages');
+  }).catch(err => {
+    console.error('[Telegram] Failed to start polling:', err.message);
+  });
+
+  bot.on('polling_error', (err) => {
+    if (err.code === 'ETELEGRAM' && err.message.includes('409')) {
+      console.log('[Telegram] Polling conflict detected — restarting in 5s...');
+      bot.stopPolling().then(() => {
+        setTimeout(() => bot.startPolling({ restart: true }), 5000);
+      });
+    }
+  });
 
   // Handle all messages
   bot.on('message', async (msg) => {
