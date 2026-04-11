@@ -188,4 +188,25 @@ router.post('/trigger/:agentName', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/webhooks/telegram
+ * Telegram webhook — receives messages instantly, no polling
+ */
+router.post('/telegram', (req, res) => {
+  try {
+    const TelegramBot = require('node-telegram-bot-api');
+    const config = require('../config');
+    // Get the bot instance from telegramService
+    const { getBotInstance } = require('../services/telegramService');
+    const bot = getBotInstance();
+    if (bot) {
+      bot.processUpdate(req.body);
+    }
+    res.sendStatus(200);
+  } catch (err) {
+    console.error('[Telegram Webhook] Error:', err.message);
+    res.sendStatus(200);
+  }
+});
+
 module.exports = router;

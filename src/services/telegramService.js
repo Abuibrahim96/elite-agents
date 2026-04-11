@@ -111,21 +111,12 @@ function initTelegram() {
 
   bot = new TelegramBot(config.telegramBotToken, { polling: false });
 
-  // Clear any existing webhook, then start polling
-  bot.deleteWebHook().then(() => {
-    bot.startPolling({ restart: true });
-    console.log('[Telegram] Bot started — listening for messages');
+  // Use webhook mode — no polling conflicts, instant message delivery
+  const webhookUrl = `https://web-production-9146c.up.railway.app/api/webhooks/telegram`;
+  bot.setWebHook(webhookUrl).then(() => {
+    console.log('[Telegram] Webhook set →', webhookUrl);
   }).catch(err => {
-    console.error('[Telegram] Failed to start polling:', err.message);
-  });
-
-  bot.on('polling_error', (err) => {
-    if (err.code === 'ETELEGRAM' && err.message.includes('409')) {
-      console.log('[Telegram] Polling conflict detected — restarting in 5s...');
-      bot.stopPolling().then(() => {
-        setTimeout(() => bot.startPolling({ restart: true }), 5000);
-      });
-    }
+    console.error('[Telegram] Webhook setup failed:', err.message);
   });
 
   // Handle all messages
@@ -668,4 +659,6 @@ async function sendToGroup(text) {
   }
 }
 
-module.exports = { initTelegram, sendToGroup };
+function getBotInstance() { return bot; }
+
+module.exports = { initTelegram, sendToGroup, getBotInstance };
