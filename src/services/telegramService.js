@@ -514,14 +514,7 @@ async function handleAddTask(chatId, data, instructions) {
 
     if (result.error) throw new Error(result.error);
 
-    bot.sendMessage(chatId,
-      `✅ *Task Added to Dashboard*\n\n` +
-      `Task: ${title}\n` +
-      `Dept: ${data.dept || 'Operations'}\n` +
-      `Priority: ${data.priority || 'normal'}\n\n` +
-      `_Task is now visible on elitetrucking.xyz dashboard_`,
-      { parse_mode: 'Markdown' }
-    );
+    bot.sendMessage(chatId, `✓ Task added.`);
   } catch (err) {
     bot.sendMessage(chatId, `⚠️ Failed to add task: ${err.message}`);
   }
@@ -537,12 +530,7 @@ async function handleCompleteTask(chatId, data, instructions) {
     const result = await supa.completeTask(identifier);
     if (result.error) throw new Error(result.error);
 
-    bot.sendMessage(chatId,
-      `✅ *Task Completed*\n\n` +
-      `Task: ${result.task.title || identifier}\n\n` +
-      `_Updated on elitetrucking.xyz dashboard_`,
-      { parse_mode: 'Markdown' }
-    );
+    bot.sendMessage(chatId, `✓ Task done.`);
   } catch (err) {
     bot.sendMessage(chatId, `⚠️ Failed to complete task: ${err.message}`);
   }
@@ -558,12 +546,7 @@ async function handleRemoveTask(chatId, data, instructions) {
     const result = await supa.removeTask(identifier);
     if (result.error) throw new Error(result.error);
 
-    bot.sendMessage(chatId,
-      `🗑️ *Task Removed*\n\n` +
-      `Task: ${result.task.title || identifier}\n\n` +
-      `_Removed from elitetrucking.xyz dashboard_`,
-      { parse_mode: 'Markdown' }
-    );
+    bot.sendMessage(chatId, `✓ Task removed.`);
   } catch (err) {
     bot.sendMessage(chatId, `⚠️ Failed to remove task: ${err.message}`);
   }
@@ -589,12 +572,7 @@ async function handleRemoveDriver(chatId, data, instructions) {
     if (result.error) throw new Error(result.error);
 
     const name = result.driver.name || `${result.driver.first_name || ''} ${result.driver.last_name || ''}`.trim();
-    bot.sendMessage(chatId,
-      `🗑️ *Driver Removed*\n\n` +
-      `Driver: ${name}\n\n` +
-      `_Removed from elitetrucking.xyz dashboard_`,
-      { parse_mode: 'Markdown' }
-    );
+    bot.sendMessage(chatId, `✓ ${name} removed.`);
   } catch (err) {
     bot.sendMessage(chatId, `⚠️ Failed to remove driver: ${err.message}`);
   }
