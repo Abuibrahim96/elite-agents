@@ -29,7 +29,14 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Health check (no auth)
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'elite-agents', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    service: 'elite-agents',
+    timestamp: new Date().toISOString(),
+    supabase_url: !!process.env.SUPABASE_URL,
+    supabase_key: !!process.env.SUPABASE_KEY,
+    supabase_key_len: (process.env.SUPABASE_KEY || '').length,
+  });
 });
 
 // API routes (auth required)
