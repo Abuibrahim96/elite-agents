@@ -121,6 +121,9 @@ function initTelegram() {
     console.error('[Telegram] Webhook setup failed:', err.message);
   });
 
+  // Track active agent per chat — stays active until another agent is called
+  const activeAgent = {};
+
   // Handle all messages
   bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
@@ -186,35 +189,37 @@ function initTelegram() {
       'acquire': 'acquisition', 'acq': 'acquisition',
     };
 
+    // Check if message starts with a callsign
+    let command = lower;
+    let calledAgent = null;
     const firstWord = lower.split(/\s+/)[0];
+
     if (callsignMap[firstWord]) {
-      const agentName = callsignMap[firstWord];
-      const rest = text.substring(firstWord.length).trim();
-      const restLower = rest.toLowerCase();
+      calledAgent = callsignMap[firstWord];
+      command = text.substring(firstWord.length).trim();
+      activeAgent[chatId] = calledAgent; // Remember this agent for follow-ups
 
       // Just the callsign with no task — respond "Ready."
-      if (!rest) {
+      if (!command) {
         return bot.sendMessage(chatId, 'Ready.');
       }
+    }
+    // No callsign — use the last active agent for this chat (context memory)
+    else if (activeAgent[chatId]) {
+      calledAgent = activeAgent[chatId];
+      command = text.trim();
+    }
 
-      // ── Handle action commands directly instead of sending to Claude ──
+    // ── If we have a command (either from callsign or context), handle it directly ──
+    if (command && (calledAgent || true)) {
+      const cmdLower = command.toLowerCase();
 
-      // ADD DRIVER: "dispatch add driver Hassan Abdullahi, dry van, Portland OR"
-      const addMatch = rest.match(/(?:add|new|hire|onboard|bring on)\s+(?:driver\s+|oo\s+)?(.+)/i);
-      if (addMatch) {
-        const namePatterns = [
-          /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/,  // "Hassan Abdullahi, dry van..."
-          /^([a-zA-Z]+(?:\s+[a-zA-Z]+)+)/,        // any two+ words
-        ];
-        let foundName = null;
-        const detail = addMatch[1].trim();
-        for (const pat of namePatterns) {
-          const m = detail.match(pat);
-          if (m) { foundName = m[1].trim(); break; }
-        }
-        if (!foundName) foundName = detail.split(',')[0].trim();
+      // ADD DRIVER
+      const addDriverCmd = command.match(/(?:add|new|hire|onboard|bring on)\s+(?:driver\s+|oo\s+)?(.+)/i);
+      if (addDriverCmd) {
+        const detail = addDriverCmd[1].trim();
         const parts = detail.split(',').map(s => s.trim());
-        const nameParts = foundName.split(/\s+/);
+        const nameParts = parts[0].split(/\s+/);
         const data = {
           first_name: nameParts[0] ? nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1).toLowerCase() : '',
           last_name: nameParts.slice(1).map(n => n.charAt(0).toUpperCase() + n.slice(1).toLowerCase()).join(' '),
@@ -228,165 +233,54 @@ function initTelegram() {
           else if (pl.includes('flatbed')) data.trailer_type = 'flatbed';
           else if (pl.includes('power only')) data.trailer_type = 'power_only';
         }
-        for (const p of parts) {
+        for (const p of parts.slice(1)) {
           const stateMatch = p.match(/([a-zA-Z\s]+?)\s*,?\s*([A-Z]{2})$/i);
           if (stateMatch && stateMatch[2]) {
             data.home_city = stateMatch[1].trim();
             data.home_state = stateMatch[2].toUpperCase();
           }
         }
-        return handleAddDriver(chatId, data);
+        if (data.first_name) return handleAddDriver(chatId, data);
       }
 
-      // REMOVE DRIVER: "dispatch fire Hassan" or "dispatch remove John"
-      const removeDriverMatch = restLower.match(/(?:fire|remove|delete|terminate|drop|kick|eject|let go|take off)\s+(?:driver\s+)?(.+)/i);
-      if (removeDriverMatch) {
-        return handleRemoveDriver(chatId, {}, removeDriverMatch[1].trim());
+      // REMOVE DRIVER
+      const removeCmd = cmdLower.match(/(?:fire|remove|delete|terminate|drop|kick|eject|let go|take off)\s+(?:driver\s+)?(.+)/i);
+      if (removeCmd && !cmdLower.includes('task') && !cmdLower.includes('load')) {
+        return handleRemoveDriver(chatId, {}, removeCmd[1].trim());
       }
 
-      // SHOW DRIVERS: "dispatch show drivers" or "dispatch list drivers"
-      if (/(?:show|list|pull up|who'?s on|display)\s+(?:driver|roster|fleet)/i.test(restLower)) {
+      // SHOW DRIVERS
+      if (/(?:show|list|pull up|who'?s on|display)\s+(?:driver|roster|fleet)/i.test(cmdLower) || cmdLower === 'drivers') {
         return handleDataQuery(chatId, 'list_drivers');
       }
 
-      // SHOW LOADS: "dispatch show loads"
-      if (/(?:show|list|pull up|display)\s+(?:load|freight)/i.test(restLower)) {
+      // SHOW LOADS
+      if (/(?:show|list|pull up|display)\s+(?:load|freight)/i.test(cmdLower) || cmdLower === 'loads') {
         return handleDataQuery(chatId, 'list_loads');
       }
 
-      // ADD LOAD: "dispatch add load..."
-      if (/(?:add|new|post)\s+(?:a\s+)?load/i.test(restLower)) {
-        // Fall through to Claude for load detail parsing
-        await bot.sendChatAction(chatId, 'typing');
-        const route = await routeMessage(rest);
-        if (route.data) return handleAddLoad(chatId, route.data);
-        return bot.sendMessage(chatId, `📦 *Add Load — What are the details?*\n\nExample: "Portland OR to Boise ID, dry van, $3500, 430 miles"`, { parse_mode: 'Markdown' });
+      // ADD TASK
+      const taskCmd = command.match(/(?:add|new|create)\s+(?:a\s+)?task\s*:?\s*(.+)/i);
+      if (taskCmd) {
+        return handleAddTask(chatId, { title: taskCmd[1].trim() }, '');
       }
 
-      // ADD TASK: "dispatch add task..."
-      const taskMatch = rest.match(/(?:add|new|create)\s+(?:a\s+)?task\s*:?\s*(.+)/i);
-      if (taskMatch) {
-        return handleAddTask(chatId, { title: taskMatch[1].trim() }, '');
+      // COMPLETE TASK
+      const doneCmd = cmdLower.match(/(?:done|mark done|complete|finished)\s*:?\s*(.+)/i);
+      if (doneCmd) {
+        return handleCompleteTask(chatId, {}, doneCmd[1].trim());
       }
 
-      // Everything else — send to the agent via Claude
-      return handleAgentRun(chatId, agentName, 'manual', rest);
-    }
-
-    // ── Quick pattern matching BEFORE Claude router ──
-
-    // ── REMOVE DRIVER: fire/remove/delete/terminate + name ──
-    const removeMatch = lower.match(/(?:fire|remove|delete|terminate|drop|kick|get rid of)\s+(?:driver\s+)?(?:named?\s+)?(.+)/i);
-    if (removeMatch && !lower.includes('task') && !lower.includes('load')) {
-      return handleRemoveDriver(chatId, {}, removeMatch[1].trim());
-    }
-
-    // ── ADD DRIVER: any message about adding a driver ──
-    // Catches: "add driver", "add driver hassan", "add maslah hussein to driver roster",
-    // "can u add a driver", "just add maslah hussein", "new driver", "hire driver", etc.
-    const wantsToAddDriver = /(?:add|new|hire|onboard|put|register|sign up|bring on)\s+.*(?:driver|oo|owner.?operator|roster|fleet)/i.test(lower)
-      || /(?:driver|oo)\s+.*(?:add|new|hire|onboard|register)/i.test(lower)
-      || /^(?:add|new|hire|onboard)\s+(?:driver|oo)/i.test(lower);
-
-    if (wantsToAddDriver) {
-      // Try to extract a name from the message
-      const namePatterns = [
-        /(?:add|new|hire|onboard|put|register|bring on)\s+(?:driver\s+|oo\s+)?(?:named?\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/,
-        /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s+(?:to|as|into)\s+(?:driver|roster|fleet)/,
-        /(?:add|just add|put)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/,
-      ];
-
-      let foundName = null;
-      for (const pat of namePatterns) {
-        const m = text.match(pat);
-        if (m) { foundName = m[1].trim(); break; }
+      // REMOVE TASK
+      const rmTaskCmd = cmdLower.match(/(?:delete|remove|cancel)\s+task\s*:?\s*(.+)/i);
+      if (rmTaskCmd) {
+        return handleRemoveTask(chatId, {}, rmTaskCmd[1].trim());
       }
 
-      if (!foundName) {
-        // No name found — ask for it
-        return bot.sendMessage(chatId,
-          `👤 *Add Driver — What's their name?*\n\nJust type their full name:\nExample: "Hassan Abdullahi"`,
-          { parse_mode: 'Markdown' }
-        );
+      // If a specific agent was called but no pattern matched — send to that agent via Claude
+      if (calledAgent) {
+        return handleAgentRun(chatId, calledAgent, 'manual', command);
       }
-
-      // Parse any extra details from the message
-      const nameParts = foundName.split(/\s+/);
-      const data = {
-        first_name: nameParts[0],
-        last_name: nameParts.slice(1).join(' '),
-        trailer_type: 'dry_van',
-        home_city: 'Portland',
-        home_state: 'OR',
-      };
-      if (lower.includes('reefer')) data.trailer_type = 'reefer';
-      if (lower.includes('flatbed')) data.trailer_type = 'flatbed';
-      if (lower.includes('power only')) data.trailer_type = 'power_only';
-
-      return handleAddDriver(chatId, data);
-    }
-
-    // ── ADD LOAD: any message about adding a load ──
-    const addLoadMatch = lower.match(/(?:add|new|post)\s+(?:a\s+)?load\s+(.+)/i);
-    if (addLoadMatch || /^(?:add|new|post)\s+(?:a\s+)?load\s*$/i.test(lower)) {
-      if (!addLoadMatch) {
-        return bot.sendMessage(chatId,
-          `📦 *Add Load — What are the details?*\n\nExample: "Portland OR to Boise ID, dry van, $3500, 430 miles"`,
-          { parse_mode: 'Markdown' }
-        );
-      }
-      // Fall through to Claude router to parse load details
-    }
-
-    // ── ADD TASK ──
-    const addTaskMatch = lower.match(/(?:add|new|create)\s+(?:a\s+)?task\s*:?\s*(.+)/i);
-    if (addTaskMatch) {
-      return handleAddTask(chatId, { title: addTaskMatch[1].trim() }, '');
-    }
-    if (/^(?:add|new|create)\s+(?:a\s+)?task\s*$/i.test(lower)) {
-      return bot.sendMessage(chatId, `📝 *Add Task — What's the task?*\n\nExample: "Follow up with XPO about reefer loads"`, { parse_mode: 'Markdown' });
-    }
-
-    // ── COMPLETE TASK ──
-    const doneMatch = lower.match(/(?:done|mark done|complete|finished)\s*:?\s*(.+)/i);
-    if (doneMatch) {
-      return handleCompleteTask(chatId, {}, doneMatch[1].trim());
-    }
-
-    // ── REMOVE TASK ──
-    const removeTaskMatch = lower.match(/(?:delete|remove|cancel)\s+task\s*:?\s*(.+)/i);
-    if (removeTaskMatch) {
-      return handleRemoveTask(chatId, {}, removeTaskMatch[1].trim());
-    }
-    if (addDriverMatch) {
-      const parts = addDriverMatch[1].split(',').map(s => s.trim());
-      const nameParts = (parts[0] || '').split(/\s+/);
-      const data = {
-        first_name: nameParts[0] ? nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1) : '',
-        last_name: nameParts.slice(1).map(n => n.charAt(0).toUpperCase() + n.slice(1)).join(' '),
-        trailer_type: 'dry_van',
-        home_city: '',
-        home_state: '',
-      };
-      // Parse equipment type
-      for (const p of parts) {
-        const pl = p.toLowerCase();
-        if (pl.includes('reefer')) data.trailer_type = 'reefer';
-        else if (pl.includes('flatbed')) data.trailer_type = 'flatbed';
-        else if (pl.includes('power only')) data.trailer_type = 'power_only';
-        else if (pl.includes('dry van') || pl.includes('dry_van')) data.trailer_type = 'dry_van';
-      }
-      // Parse city/state from last parts
-      for (const p of parts) {
-        const stateMatch = p.match(/([a-zA-Z\s]+?)\s*,?\s*([A-Z]{2})$/i) || p.match(/^([A-Z]{2})$/i);
-        if (stateMatch && stateMatch[2]) {
-          data.home_city = stateMatch[1].trim();
-          data.home_state = stateMatch[2].toUpperCase();
-        } else if (stateMatch && stateMatch[1] && stateMatch[1].length === 2) {
-          data.home_state = stateMatch[1].toUpperCase();
-        }
-      }
-      return handleAddDriver(chatId, data);
     }
 
     // Smart routing — use Claude for everything else
