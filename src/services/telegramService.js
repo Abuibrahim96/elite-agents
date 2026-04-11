@@ -452,9 +452,18 @@ async function handleRemoveTask(chatId, data, instructions) {
 }
 
 async function handleRemoveDriver(chatId, data, instructions) {
-  const identifier = data.name || data.first_name || data.id || instructions || '';
+  // Extract name from multiple possible sources
+  let identifier = data.name || data.driver_name || data.first_name || data.id || '';
+
+  // If no structured data, try to extract from instructions by removing action words
+  if (!identifier && instructions) {
+    identifier = instructions
+      .replace(/\b(remove|delete|fire|terminate|drop|get rid of|kick|driver|oo|owner.?operator)\b/gi, '')
+      .trim();
+  }
+
   if (!identifier) {
-    return bot.sendMessage(chatId, `⚠️ Which driver? Example: "Remove driver Hassan Abdullahi" or "Delete driver 3"`);
+    return bot.sendMessage(chatId, `⚠️ Which driver? Example: "Fire Hassan" or "Remove driver Maslah"`);
   }
 
   try {
