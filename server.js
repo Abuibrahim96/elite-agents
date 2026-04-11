@@ -53,22 +53,22 @@ app.use((err, req, res, next) => {
 });
 
 const port = process.env.PORT || config.port || 3000;
-app.listen(port, '0.0.0.0', () => {
-  console.log(`\n========================================`);
-  console.log(`  ELITE TRUCKING AGENT SYSTEM`);
-  console.log(`  Running on port ${port}`);
-  console.log(`  Stub mode: ${config.stubMode ? 'ON (no real SMS/email)' : 'OFF (LIVE)'}`);
-  console.log(`========================================\n`);
 
-  // Start Telegram bot if token is set
-  if (config.telegramBotToken) {
-    try {
-      const { initTelegram } = require('./src/services/telegramService');
-      initTelegram();
-    } catch (e) {
-      console.error('[Telegram] Failed to start:', e.message);
-    }
+// Start Telegram bot BEFORE listen — so it initializes immediately
+if (process.env.TELEGRAM_BOT_TOKEN) {
+  try {
+    console.log('[Telegram] Token found, starting bot...');
+    const { initTelegram } = require('./src/services/telegramService');
+    initTelegram();
+  } catch (e) {
+    console.error('[Telegram] Failed to start:', e.message, e.stack);
   }
+} else {
+  console.log('[Telegram] No token — bot disabled');
+}
+
+app.listen(port, '0.0.0.0', () => {
+  console.log(`ELITE TRUCKING AGENT SYSTEM running on port ${port}`);
 });
 
 module.exports = app;
