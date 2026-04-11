@@ -174,9 +174,31 @@ function initTelegram() {
       return handleAgentRun(chatId, agentName, 'manual', null);
     }
 
-    // ── Quick pattern matching BEFORE Claude router ──
-    // Catches simple commands instantly without wasting an API call
     const lower = text.toLowerCase().trim();
+
+    // ── CALLSIGN ROUTING — direct agent addressing ──
+    const callsignMap = {
+      'hq': 'boss', 'boss': 'boss', 'command': 'boss',
+      'dispatch': 'dispatch', 'dis': 'dispatch',
+      'sales': 'outreach', 'outreach': 'outreach',
+      'loads': 'load_update', 'load': 'load_update',
+      'comply': 'compliance', 'compliance': 'compliance',
+      'acquire': 'acquisition', 'acq': 'acquisition',
+    };
+
+    const firstWord = lower.split(/\s+/)[0];
+    if (callsignMap[firstWord]) {
+      const agentName = callsignMap[firstWord];
+      const rest = text.substring(firstWord.length).trim();
+      // Just the callsign with no task — respond "Ready."
+      if (!rest) {
+        return bot.sendMessage(chatId, 'Ready.');
+      }
+      // Pass the rest as instructions to the agent
+      return handleAgentRun(chatId, agentName, 'manual', rest);
+    }
+
+    // ── Quick pattern matching BEFORE Claude router ──
 
     // ── REMOVE DRIVER: fire/remove/delete/terminate + name ──
     const removeMatch = lower.match(/(?:fire|remove|delete|terminate|drop|kick|get rid of)\s+(?:driver\s+)?(?:named?\s+)?(.+)/i);
