@@ -190,11 +190,86 @@ function initTelegram() {
     if (callsignMap[firstWord]) {
       const agentName = callsignMap[firstWord];
       const rest = text.substring(firstWord.length).trim();
+      const restLower = rest.toLowerCase();
+
       // Just the callsign with no task — respond "Ready."
       if (!rest) {
         return bot.sendMessage(chatId, 'Ready.');
       }
-      // Pass the rest as instructions to the agent
+
+      // ── Handle action commands directly instead of sending to Claude ──
+
+      // ADD DRIVER: "dispatch add driver Hassan Abdullahi, dry van, Portland OR"
+      const addMatch = rest.match(/(?:add|new|hire|onboard|bring on)\s+(?:driver\s+|oo\s+)?(.+)/i);
+      if (addMatch) {
+        const namePatterns = [
+          /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/,  // "Hassan Abdullahi, dry van..."
+          /^([a-zA-Z]+(?:\s+[a-zA-Z]+)+)/,        // any two+ words
+        ];
+        let foundName = null;
+        const detail = addMatch[1].trim();
+        for (const pat of namePatterns) {
+          const m = detail.match(pat);
+          if (m) { foundName = m[1].trim(); break; }
+        }
+        if (!foundName) foundName = detail.split(',')[0].trim();
+        const parts = detail.split(',').map(s => s.trim());
+        const nameParts = foundName.split(/\s+/);
+        const data = {
+          first_name: nameParts[0] ? nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1).toLowerCase() : '',
+          last_name: nameParts.slice(1).map(n => n.charAt(0).toUpperCase() + n.slice(1).toLowerCase()).join(' '),
+          trailer_type: 'dry_van',
+          home_city: 'Portland',
+          home_state: 'OR',
+        };
+        for (const p of parts) {
+          const pl = p.toLowerCase();
+          if (pl.includes('reefer')) data.trailer_type = 'reefer';
+          else if (pl.includes('flatbed')) data.trailer_type = 'flatbed';
+          else if (pl.includes('power only')) data.trailer_type = 'power_only';
+        }
+        for (const p of parts) {
+          const stateMatch = p.match(/([a-zA-Z\s]+?)\s*,?\s*([A-Z]{2})$/i);
+          if (stateMatch && stateMatch[2]) {
+            data.home_city = stateMatch[1].trim();
+            data.home_state = stateMatch[2].toUpperCase();
+          }
+        }
+        return handleAddDriver(chatId, data);
+      }
+
+      // REMOVE DRIVER: "dispatch fire Hassan" or "dispatch remove John"
+      const removeDriverMatch = restLower.match(/(?:fire|remove|delete|terminate|drop|kick|eject|let go|take off)\s+(?:driver\s+)?(.+)/i);
+      if (removeDriverMatch) {
+        return handleRemoveDriver(chatId, {}, removeDriverMatch[1].trim());
+      }
+
+      // SHOW DRIVERS: "dispatch show drivers" or "dispatch list drivers"
+      if (/(?:show|list|pull up|who'?s on|display)\s+(?:driver|roster|fleet)/i.test(restLower)) {
+        return handleDataQuery(chatId, 'list_drivers');
+      }
+
+      // SHOW LOADS: "dispatch show loads"
+      if (/(?:show|list|pull up|display)\s+(?:load|freight)/i.test(restLower)) {
+        return handleDataQuery(chatId, 'list_loads');
+      }
+
+      // ADD LOAD: "dispatch add load..."
+      if (/(?:add|new|post)\s+(?:a\s+)?load/i.test(restLower)) {
+        // Fall through to Claude for load detail parsing
+        await bot.sendChatAction(chatId, 'typing');
+        const route = await routeMessage(rest);
+        if (route.data) return handleAddLoad(chatId, route.data);
+        return bot.sendMessage(chatId, `📦 *Add Load — What are the details?*\n\nExample: "Portland OR to Boise ID, dry van, $3500, 430 miles"`, { parse_mode: 'Markdown' });
+      }
+
+      // ADD TASK: "dispatch add task..."
+      const taskMatch = rest.match(/(?:add|new|create)\s+(?:a\s+)?task\s*:?\s*(.+)/i);
+      if (taskMatch) {
+        return handleAddTask(chatId, { title: taskMatch[1].trim() }, '');
+      }
+
+      // Everything else — send to the agent via Claude
       return handleAgentRun(chatId, agentName, 'manual', rest);
     }
 
