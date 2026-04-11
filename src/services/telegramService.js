@@ -189,9 +189,34 @@ function initTelegram() {
     // "add driver john smith, dry van, portland or"
     const addDriverMatch = lower.match(/^(?:add|new|hire|onboard)\s+(?:driver|oo|owner.?operator)\s+(.+)$/i);
     if (addDriverMatch) {
-      await bot.sendChatAction(chatId, 'typing');
-      const route = await routeMessage(text);
-      return handleAddDriver(chatId, route.data || {});
+      const parts = addDriverMatch[1].split(',').map(s => s.trim());
+      const nameParts = (parts[0] || '').split(/\s+/);
+      const data = {
+        first_name: nameParts[0] ? nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1) : '',
+        last_name: nameParts.slice(1).map(n => n.charAt(0).toUpperCase() + n.slice(1)).join(' '),
+        trailer_type: 'dry_van',
+        home_city: '',
+        home_state: '',
+      };
+      // Parse equipment type
+      for (const p of parts) {
+        const pl = p.toLowerCase();
+        if (pl.includes('reefer')) data.trailer_type = 'reefer';
+        else if (pl.includes('flatbed')) data.trailer_type = 'flatbed';
+        else if (pl.includes('power only')) data.trailer_type = 'power_only';
+        else if (pl.includes('dry van') || pl.includes('dry_van')) data.trailer_type = 'dry_van';
+      }
+      // Parse city/state from last parts
+      for (const p of parts) {
+        const stateMatch = p.match(/([a-zA-Z\s]+?)\s*,?\s*([A-Z]{2})$/i) || p.match(/^([A-Z]{2})$/i);
+        if (stateMatch && stateMatch[2]) {
+          data.home_city = stateMatch[1].trim();
+          data.home_state = stateMatch[2].toUpperCase();
+        } else if (stateMatch && stateMatch[1] && stateMatch[1].length === 2) {
+          data.home_state = stateMatch[1].toUpperCase();
+        }
+      }
+      return handleAddDriver(chatId, data);
     }
 
     // "done: task name" or "mark done task name" or "complete task name"
